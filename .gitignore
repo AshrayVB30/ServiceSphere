@@ -1,31 +1,46 @@
-# Environment variables
+# ==============================================================================
+# ServiceSphere Git Ignore Configuration (.gitignore)
+# Specifies files and folders that Git should deliberately not track or commit.
+# ==============================================================================
+
+# --- Sensitive Environment & Secret Files ---
+# Never commit real .env files containing passwords and API keys to GitHub
 .env
 .env.*
+# Keep the safe template file tracked so collaborators know which variables are needed
 !.env.example
 
-# Python
+# --- Python Compiled Bytecode & Caches ---
+# Compiled bytecode files generated automatically by the Python interpreter
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# --- Virtual Environments ---
+# Local isolated Python environment packages (dependencies should be in requirements.txt)
 env/
 venv/
 .venv/
 ENV/
 
-# Django
+# --- Django Generated & Runtime Files ---
+# Local database files (avoid committing local test data)
 *.sqlite3
+# Log files created during server execution
 *.log
+# Local-only setting overrides
 local_settings.py
+# User-uploaded files and collected static assets
 media/
 staticfiles/
 
-# IDE & OS
+# --- IDE & Operating System Metadata ---
+# Code editor configurations and system thumbnail caches
 .idea/
 .vscode/
 *.swp
 *.swo
 Thumbs.db
 .DS_Store
-

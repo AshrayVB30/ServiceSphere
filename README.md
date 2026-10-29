@@ -36,7 +36,6 @@ cd backend
 conda create -n servicesphere python=3.12 -y
 conda activate servicesphere
 pip install -r requirements.txt
-django-admin startproject config backend
 python manage.py runserver
 ```
 
