@@ -148,3 +148,104 @@ class Ticket(models.Model):
         Example output: '[OPEN] Low - Printer not working'
         """
         return f"[{self.get_status_display()}] {self.get_priority_display()} - {self.subject}"
+
+
+
+class TicketHistory(models.Model):
+    """
+    Ticket Audit & History Log Model.
+    
+    Maintains an immutable historical record of critical actions performed on tickets,
+    including who made the change, timestamp, status transitions, agent reassignments,
+    and explanatory notes.
+    """
+
+    class Action(models.TextChoices):
+        # Types of recorded audit events
+        CREATED = "CREATED", "Created"
+        ASSIGNED = "ASSIGNED", "Assigned"
+        STATUS_CHANGED = "STATUS_CHANGED", "Status Changed"
+
+    # Reference to the ticket that this audit event belongs to.
+    # on_delete=models.PROTECT prevents deleting tickets that have historical audit logs.
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.PROTECT,
+        related_name="history",
+        help_text="The ticket associated with this audit entry.",
+    )
+
+    # The type of action that was performed (e.g. Created, Assigned, Status Changed)
+    action = models.CharField(
+        max_length=20,
+        choices=Action.choices,
+        help_text="Type of action performed.",
+    )
+
+    # The user (admin, agent, or client) who executed the action
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="ticket_history_actions",
+        help_text="The user who performed this action.",
+    )
+
+    # The previous lifecycle status before this action occurred (blank if creation or assignment)
+    previous_status = models.CharField(
+        max_length=20,
+        choices=Ticket.Status.choices,
+        blank=True,
+        help_text="Status prior to this change.",
+    )
+
+    # The new lifecycle status applied by this action
+    new_status = models.CharField(
+        max_length=20,
+        choices=Ticket.Status.choices,
+        blank=True,
+        help_text="New status after this change.",
+    )
+
+    # Previous assigned agent (if action was ASSIGNED)
+    previous_assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="previous_assigned_histories",
+        help_text="Agent previously assigned to the ticket.",
+    )
+
+    # New assigned agent (if action was ASSIGNED)
+    new_assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="new_assigned_histories",
+        help_text="Agent newly assigned to the ticket.",
+    )
+
+    # Optional explanatory note or context recorded with this change
+    note = models.TextField(
+        blank=True,
+        help_text="Optional context or reason for this change.",
+    )
+
+    # Exact timestamp when the action occurred
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Timestamp when this history event was recorded.",
+    )
+
+    class Meta:
+        # Show newest audit events first
+        ordering = ["-created_at"]
+        verbose_name_plural = "Ticket histories"
+
+    def __str__(self):
+        """
+        Concise summary of the audit entry.
+        Example output: 'UUID - Status Changed by support_bob'
+        """
+        return f"{self.ticket.ticket_number} - {self.get_action_display()} by {self.performed_by.username}"

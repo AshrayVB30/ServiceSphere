@@ -188,3 +188,37 @@ MAILERS = {
         "BACKEND": "django.core.mail.backends.console.EmailBackend",
     },
 }
+
+# ==============================================================================
+# DJANGO REST FRAMEWORK (DRF) CONFIGURATION
+# ==============================================================================
+REST_FRAMEWORK = {
+    # Authentication schemes used to identify the user making the API request.
+    # Evaluated in order:
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        # SessionAuthentication: Authenticates requests using Django's session cookie.
+        # This enables testing directly via the browser and the DRF Browsable API.
+        "rest_framework.authentication.SessionAuthentication",
+
+        # BasicAuthentication: Authenticates requests using HTTP Basic Authorization header.
+        # Convenient for local command-line testing (curl, Postman, automated test suites).
+        "rest_framework.authentication.BasicAuthentication",
+    ],
+
+    # Default permission policy applied to all REST endpoints across the project.
+    "DEFAULT_PERMISSION_CLASSES": [
+        # Requires the user to be logged in (authenticated) for all API endpoints
+        # unless an individual view explicitly declares different permissions.
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+
+# ==============================================================================
+# AUTHENTICATION REDIRECT URLS
+# ==============================================================================
+# Where to redirect users after successful login via /api-auth/login/
+LOGIN_REDIRECT_URL = "/api/tickets/"
+
+# Where to redirect users after logging out via /api-auth/logout/
+LOGOUT_REDIRECT_URL = "/api-auth/login/"
