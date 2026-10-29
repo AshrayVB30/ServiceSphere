@@ -1,0 +1,14 @@
+# Web framework for building the Django application
+django
+
+# Toolkit for creating RESTful APIs in Django
+djangorestframework
+
+# Enables Cross-Origin Resource Sharing (CORS) for frontend-backend communication
+django-cors-headers
+
+# PostgreSQL database adapter for Python and Django
+psycopg2-binary
+
+# Loads environment variables from a .env file
+python-dotenv

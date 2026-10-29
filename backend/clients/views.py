@@ -1,0 +1,21 @@
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from .models import Client
+from .permissions import IsSystemAdmin
+from .serializers import ClientSerializer
+
+
+class ClientViewSet(viewsets.ModelViewSet):
+    queryset = Client.objects.all()
+    serializer_class = ClientSerializer
+    permission_classes = [
+        IsAuthenticated,
+        IsSystemAdmin,
+    ]
+    http_method_names = [
+        "get",
+        "post",
+        "patch",
+        "head",
+        "options",
+    ]
