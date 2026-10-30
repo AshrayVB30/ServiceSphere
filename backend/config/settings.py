@@ -41,10 +41,13 @@ ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv(
         "DJANGO_ALLOWED_HOSTS",
-        "127.0.0.1,localhost",
+        "127.0.0.1,localhost,testserver",
     ).split(",")
     if host.strip()
 ]
+# Ensure testserver is always allowed for testing and APIClient in shell
+if "testserver" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("testserver")
 
 
 # ==============================================================================
@@ -69,6 +72,9 @@ INSTALLED_APPS = [
     "accounts",                      # Custom User model, authentication, and role management
     "clients",                       # Client organization management and tenancy
     "tickets",                       # Help desk ticket management, workflows, and assignment
+    "approvals",                     # Ticket approvals, decision history, and authorization workflows
+    "sla",                           # Service Level Agreements, deadline monitoring, and escalations
+    "notifications",                 # In-app and email notification management and delivery
 ]
 
 
@@ -182,12 +188,19 @@ STATIC_URL = "static/"
 # ==============================================================================
 # EMAIL NOTIFICATIONS CONFIGURATION
 # ==============================================================================
-# For local development, prints outgoing emails to the console instead of sending real emails.
-MAILERS = {
-    "default": {
-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
-    },
-}
+# Master toggle: Delivery is disabled by default during development and demonstrations.
+EMAIL_NOTIFICATIONS_ENABLED = os.getenv("EMAIL_NOTIFICATIONS_ENABLED", "False").lower() == "true"
+
+# Django email backend: Console backend prints outgoing emails to the terminal for local testing
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+
+# SMTP Server connection configuration (read safely from environment variables)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "support@servicesphere.local")
 
 # ==============================================================================
 # DJANGO REST FRAMEWORK (DRF) CONFIGURATION
@@ -222,3 +235,30 @@ LOGIN_REDIRECT_URL = "/api/tickets/"
 
 # Where to redirect users after logging out via /api-auth/logout/
 LOGOUT_REDIRECT_URL = "/api-auth/login/"
+
+
+# ==============================================================================
+# CELERY & REDIS CONFIGURATION (SLA Monitoring & Periodic Tasks)
+# ==============================================================================
+# Redis message broker URL for Celery background tasks
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
+
+# Redis database for storing Celery task results
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
+
+# Supported data formats for task payloads and results
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+
+# Timezone matching the Django application timezone
+CELERY_TIMEZONE = TIME_ZONE
+
+# Automatically discover and register asynchronous tasks in installed apps
+CELERY_BEAT_SCHEDULE = {
+    # Periodically run SLA monitoring and breach detection every 5 minutes (300 seconds)
+    "monitor-sla-deadlines-every-5-minutes": {
+        "task": "sla.tasks.monitor_sla_deadlines_task",
+        "schedule": 300.0,
+    },
+}

@@ -12,15 +12,18 @@ and state-machine transition rules:
 """
 
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from accounts.models import User
-from .models import Ticket, TicketHistory
+from .comment_serializers import TicketCommentSerializer
+from .models import Ticket, TicketHistory, TicketComment
 from .serializers import TicketSerializer
 
 
@@ -132,6 +135,13 @@ class TicketViewSet(viewsets.ModelViewSet):
                 performed_by=user,
                 new_status=ticket.status,
             )
+            # Automatically assign active SLA policy and calculate initial deadlines
+            from sla.services import assign_sla_to_ticket
+            assign_sla_to_ticket(ticket)
+
+            # Dispatch ticket creation notifications
+            from notifications.services import notify_ticket_created
+            notify_ticket_created(ticket)
 
     @action(detail=True, methods=["get", "post"], url_path="assign")
     def assign(self, request, pk=None):
@@ -193,6 +203,10 @@ class TicketViewSet(viewsets.ModelViewSet):
                 new_assignee=agent,
                 note=request.data.get("note", ""),
             )
+
+            # Dispatch ticket assignment notification
+            from notifications.services import notify_ticket_assigned
+            notify_ticket_assigned(ticket, previous_assignee=previous_agent)
 
         return Response(TicketSerializer(ticket).data, status=status.HTTP_200_OK)
 
@@ -266,6 +280,13 @@ class TicketViewSet(viewsets.ModelViewSet):
 
             ticket.save(update_fields=update_fields)
 
+            # Evaluate SLA resolution / reopened metrics
+            from sla.services import record_ticket_resolution, record_ticket_reopened
+            if new_status in (Ticket.Status.RESOLVED, Ticket.Status.CLOSED):
+                record_ticket_resolution(ticket)
+            elif new_status == Ticket.Status.IN_PROGRESS and previous_status in (Ticket.Status.RESOLVED, Ticket.Status.CLOSED):
+                record_ticket_reopened(ticket)
+
             # Record audit history
             TicketHistory.objects.create(
                 ticket=ticket,
@@ -276,4 +297,175 @@ class TicketViewSet(viewsets.ModelViewSet):
                 note=request.data.get("note", ""),
             )
 
+            # Dispatch ticket status update notification
+            from notifications.services import notify_ticket_status_changed
+            notify_ticket_status_changed(
+                ticket=ticket,
+                previous_status=previous_status,
+                new_status=new_status,
+                performed_by=user,
+            )
+
         return Response(TicketSerializer(ticket).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="change_priority")
+    def change_priority(self, request, pk=None):
+        """
+        Updates the priority of a ticket and automatically recalculates SLA deadlines.
+        POST /api/tickets/{id}/change_priority/
+        """
+        ticket = self.get_object()
+        user = request.user
+        if not (is_system_admin(user) or (user.role == User.Role.SUPPORT_AGENT and ticket.assigned_to == user)):
+            raise PermissionDenied("Only administrators or the assigned agent can change ticket priority.")
+
+        new_priority = request.data.get("priority")
+        if not new_priority or new_priority not in Ticket.Priority.values:
+            raise ValidationError({"priority": f"Invalid priority. Choices are {Ticket.Priority.values}."})
+
+        previous_priority = ticket.priority
+        if new_priority != previous_priority:
+            ticket.priority = new_priority
+            ticket.save(update_fields=["priority", "updated_at"])
+            from sla.services import assign_sla_to_ticket
+            assign_sla_to_ticket(ticket, recalculated=True, previous_priority=previous_priority)
+
+        return Response(TicketSerializer(ticket).data, status=status.HTTP_200_OK)
+
+
+
+def can_access_ticket(user, ticket):
+    """
+    Determines whether a user has permission to access a specific ticket conversation.
+
+    Access Control Rules:
+    - System Administrators: Unrestricted access to all tickets.
+    - Support Agents: Can only access tickets specifically assigned to them.
+    - Clients and Approvers: Can only access tickets belonging to their own active organization.
+    - Anyone else: Access denied.
+    """
+    if is_system_admin(user):
+        return True
+
+    if user.role == User.Role.SUPPORT_AGENT:
+        return ticket.assigned_to_id == user.id
+
+    if user.role in (User.Role.CLIENT, User.Role.APPROVER):
+        return bool(
+            user.client_id is not None
+            and user.client_id == ticket.client_id
+            and user.client.is_active
+        )
+
+    return False
+
+
+def can_view_internal_comments(user):
+    """
+    Determines whether a user has clearance to view or author internal staff notes.
+
+    Clearance Rules:
+    - System Administrators and Support Agents: Permitted.
+    - Clients, Approvers, and external users: Strictly forbidden.
+    """
+    return bool(
+        is_system_admin(user)
+        or user.role == User.Role.SUPPORT_AGENT
+    )
+
+
+class TicketCommentView(APIView):
+    """
+    API View for retrieving and adding comments on a specific ticket.
+
+    Endpoints:
+    - GET  /api/tickets/{ticket_id}/comments/ -> Retrieve chronological conversation history
+    - POST /api/tickets/{ticket_id}/comments/ -> Post a new comment or internal note
+
+    Security Features:
+    1. Tenant isolation: Clients only see comments on their own company's tickets.
+    2. Agent isolation: Agents only see comments on tickets assigned to them.
+    3. Confidentiality: Internal staff notes (`is_internal=True`) are stripped from responses to clients.
+    4. Author integrity: The comment author is always derived from the authenticated session.
+    5. Approver role: Approvers can view conversation history, but cannot post comments.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get_ticket(self, request, ticket_id):
+        """
+        Retrieves the ticket by primary key while validating that the requesting
+        user has permission to view the ticket. Raises 404 if not found, or 403 if forbidden.
+        """
+        ticket = get_object_or_404(
+            Ticket.objects.select_related("client", "assigned_to"),
+            pk=ticket_id,
+        )
+
+        if not can_access_ticket(request.user, ticket):
+            raise PermissionDenied("You do not have permission to access this ticket's conversation.")
+
+        return ticket
+
+    def get(self, request, ticket_id):
+        """
+        Retrieve all comments for a ticket in chronological order.
+        Hides internal notes if the requesting user does not have internal staff clearance.
+        """
+        ticket = self.get_ticket(request, ticket_id)
+
+        # Pre-fetch author relations for optimal query efficiency
+        comments = ticket.comments.select_related("author").all()
+
+        # If user is not internal staff, hide all internal notes
+        if not can_view_internal_comments(request.user):
+            comments = comments.filter(is_internal=False)
+
+        serializer = TicketCommentSerializer(comments, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request, ticket_id):
+        """
+        Add a new comment or internal note to the ticket conversation.
+        """
+        ticket = self.get_ticket(request, ticket_id)
+        user = request.user
+
+        # Business Rule: Approvers can monitor discussions but cannot post comments
+        if user.role == User.Role.APPROVER:
+            raise PermissionDenied("Approvers can view ticket comments but cannot add comments.")
+
+        # Robustly parse is_internal flag (handles JSON booleans, strings 'true'/'false', or integers 0/1)
+        raw_internal = request.data.get("is_internal", False)
+        if isinstance(raw_internal, str):
+            is_internal = raw_internal.strip().lower() in ("true", "1", "yes", "t")
+        else:
+            is_internal = bool(raw_internal)
+
+        # Security check: Clients cannot create internal notes
+        if is_internal and not can_view_internal_comments(user):
+            raise PermissionDenied("Only authorized support staff can create internal notes.")
+
+        # Ensure clients can never post internal notes
+        if user.role == User.Role.CLIENT:
+            is_internal = False
+
+        serializer = TicketCommentSerializer(data=request.data)
+        if serializer.is_valid():
+            # Securely attach the ticket, author, and internal status on the server
+            comment = serializer.save(
+                ticket=ticket,
+                author=user,
+                is_internal=is_internal,
+            )
+            # Evaluate qualifying first public response for SLA tracking
+            from sla.services import record_first_response
+            record_first_response(comment)
+
+            # Dispatch comment notification (respects internal staff privacy)
+            from notifications.services import notify_new_comment
+            notify_new_comment(comment)
+
+            return Response(TicketCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

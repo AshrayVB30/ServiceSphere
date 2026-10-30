@@ -7,7 +7,7 @@ Registers the Ticket and TicketHistory models in the Django Admin interface:
 """
 
 from django.contrib import admin
-from .models import Ticket, TicketHistory
+from .models import Ticket, TicketHistory, TicketComment
 
 
 @admin.register(Ticket)
@@ -148,5 +148,57 @@ class TicketHistoryAdmin(admin.ModelAdmin):
         """
         Disables the '+ Add Ticket history' button.
         Audit records must strictly be created by system workflows, never manually created by staff.
+        """
+        return False
+
+
+
+@admin.register(TicketComment)
+class TicketCommentAdmin(admin.ModelAdmin):
+    """
+    Admin interface for inspecting Ticket Conversation Comments and Internal Notes.
+    Comments are read-only in the admin to preserve the integrity of communication records.
+    """
+
+    # Columns displayed in the comments table view
+    list_display = (
+        "ticket",        # Related ticket
+        "author",        # Author user
+        "is_internal",   # Private internal note flag
+        "created_at",    # Timestamp
+    )
+
+    # Sidebar filters to separate internal notes from public comments
+    list_filter = (
+        "is_internal",
+        "created_at",
+    )
+
+    # Search bar across ticket subject, author username, and comment message body
+    search_fields = (
+        "ticket__subject",
+        "author__username",
+        "message",
+    )
+
+    # Prevent editing existing comments in the admin interface to protect communication history
+    readonly_fields = (
+        "ticket",
+        "author",
+        "message",
+        "is_internal",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        """
+        Disables the '+ Add Ticket comment' button in Django Admin.
+        Comments must be posted through the official ticket conversation API.
+        """
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """
+        Disables editing existing comments to keep message history immutable.
         """
         return False

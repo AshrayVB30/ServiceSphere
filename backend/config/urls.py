@@ -29,4 +29,13 @@ urlpatterns = [
 
     # Help desk ticket management REST APIs
     path("api/", include("tickets.urls")),
+
+    # Ticket approval workflows and decision history REST APIs
+    path("api/", include("approvals.urls")),
+
+    # SLA policy management, deadline tracking, and automated escalations
+    path("api/sla/", include("sla.urls")),
+
+    # In-app and email notifications, preferences, and counters
+    path("api/notifications/", include("notifications.urls")),
 ]

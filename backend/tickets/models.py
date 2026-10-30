@@ -249,3 +249,63 @@ class TicketHistory(models.Model):
         Example output: 'UUID - Status Changed by support_bob'
         """
         return f"{self.ticket.ticket_number} - {self.get_action_display()} by {self.performed_by.username}"
+
+
+
+class TicketComment(models.Model):
+    """
+    Ticket Comment & Conversation Model.
+    
+    Represents an individual message exchanged within a ticket conversation.
+    Supports both public communication (between clients and support agents)
+    and internal notes (restricted strictly to authorized support personnel).
+    """
+
+    # The ticket to which this comment belongs.
+    # on_delete=models.PROTECT guarantees ticket conversation records cannot be accidentally lost.
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.PROTECT,
+        related_name="comments",
+        help_text="The ticket associated with this comment.",
+    )
+
+    # The user (client employee, support agent, or administrator) who wrote the comment.
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="ticket_comments",
+        help_text="The user who authored this comment.",
+    )
+
+    # The actual message text / content of the comment
+    message = models.TextField(
+        help_text="The body content of the comment.",
+    )
+
+    # Internal note flag:
+    # If True, this comment is an internal note visible ONLY to Support Agents and Administrators.
+    # Clients and approvers will never see or receive internal comments.
+    is_internal = models.BooleanField(
+        default=False,
+        help_text="Internal notes are visible only to authorized support staff.",
+    )
+
+    # Timestamp recorded automatically when the comment is posted
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Timestamp when the comment was created.",
+    )
+
+    class Meta:
+        # Chronological ordering: oldest messages first so conversations read top-to-bottom
+        ordering = ["created_at"]
+        verbose_name = "Ticket comment"
+        verbose_name_plural = "Ticket comments"
+
+    def __str__(self):
+        """
+        Human-readable summary of the comment.
+        Example output: 'Comment on <ticket-uuid>'
+        """
+        return f"Comment on {self.ticket.ticket_number}"

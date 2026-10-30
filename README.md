@@ -19,6 +19,37 @@ Therefore, a centralized Help Desk System is required to manage client onboardin
 
 ## Folder Structure
 
+E:\ServiceSphere/
+├── .gitignore                     # Git exclusion rules (secrets, bytecode, db)
+├── README.md
+├── documentation/
+└── backend/
+    ├── .env                       # Local secrets (PostgreSQL port 5433, secret key)
+    ├── .env.example               # Safe environment template
+    ├── manage.py                  # Django CLI entrypoint
+    ├── config/
+    │   ├── settings.py            # Global settings, DB, DRF, Auth redirects
+    │   ├── urls.py                # Root router (admin, api-auth, api)
+    │   ├── wsgi.py & asgi.py
+    ├── core/                      # Shared base utilities & health checks
+    │   ├── views.py, urls.py, tests.py
+    ├── accounts/                  # User identity & roles
+    │   ├── models.py              # Custom User model (ADMIN, AGENT, CLIENT, APPROVER)
+    │   ├── admin.py               # CustomUserAdmin
+    │   ├── tests.py
+    ├── clients/                   # Multi-tenant organization onboarding
+    │   ├── models.py              # Client model & indexes
+    │   ├── serializers.py         # ClientSerializer
+    │   ├── permissions.py         # IsSystemAdmin
+    │   ├── views.py               # ClientViewSet
+    │   ├── urls.py & admin.py
+    └── tickets/                   # Ticket management & workflows
+        ├── models.py              # Ticket & TicketHistory models
+        ├── serializers.py         # TicketSerializer with readable relations
+        ├── views.py               # TicketViewSet (RBAC querysets, assign, change_status)
+        ├── urls.py                # /api/tickets/ router
+        ├── admin.py               # TicketAdmin & read-only TicketHistoryAdmin
+        └── tests.py               # 15 automated unit & integration tests
 
 
 ## Environment Setup
@@ -45,4 +76,11 @@ python manage.py runserver
 cd frontend
 npm install
 npm run dev
+```
+
+Terminal 3:
+```bash 
+conda activate servicesphere
+cd E:\ServiceSphere\backend
+celery -A config beat -l info
 ```

@@ -23,7 +23,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from clients.models import Client
-from tickets.models import Ticket, TicketHistory
+from tickets.models import Ticket, TicketHistory, TicketComment
 
 User = get_user_model()
 
@@ -390,3 +390,257 @@ class TicketAPITests(APITestCase):
             {"status": Ticket.Status.IN_PROGRESS},
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_assigned_agent_can_resolve_ticket(self):
+        """
+        Assigned support agent can advance ticket status from IN_PROGRESS to RESOLVED,
+        setting the resolved_at timestamp and creating a STATUS_CHANGED history record.
+        """
+        # Set ticket to IN_PROGRESS first
+        self.ticket_org1.status = Ticket.Status.IN_PROGRESS
+        self.ticket_org1.save(update_fields=["status"])
+
+        self.client.force_authenticate(user=self.agent)
+
+        response = self.client.post(
+            f"/api/tickets/{self.ticket_org1.id}/change_status/",
+            {"status": Ticket.Status.RESOLVED, "note": "Resolved root cause in router config"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.ticket_org1.refresh_from_db()
+        self.assertEqual(self.ticket_org1.status, Ticket.Status.RESOLVED)
+        self.assertIsNotNone(self.ticket_org1.resolved_at)
+
+        # Verify history entry
+        history = self.ticket_org1.history.filter(
+            action=TicketHistory.Action.STATUS_CHANGED,
+            new_status=Ticket.Status.RESOLVED,
+        ).first()
+        self.assertIsNotNone(history)
+        self.assertEqual(history.performed_by, self.agent)
+        self.assertEqual(history.previous_status, Ticket.Status.IN_PROGRESS)
+        self.assertEqual(history.note, "Resolved root cause in router config")
+
+
+
+class TicketCommentAPITests(APITestCase):
+    """
+    Test suite for Ticket Comments, Conversation History, and Internal Notes.
+    Validates all 8 security checklist items for ticket conversations.
+    """
+
+    def setUp(self):
+        """
+        Sets up organizations and users across different roles (Client, Approver, Agent, Unassigned Agent, Admin).
+        """
+        # Client Organization
+        self.org = Client.objects.create(
+            name="Apex Dynamics",
+            code="apex-dynamics",
+            contact_email="support@apexdynamics.com",
+            is_active=True,
+        )
+
+        # Another Client Organization (for isolation tests)
+        self.other_org = Client.objects.create(
+            name="Beta Systems",
+            code="beta-systems",
+            contact_email="support@betasystems.com",
+            is_active=True,
+        )
+
+        # Client user
+        self.client_user = User.objects.create_user(
+            username="ashray_client",
+            email="ashray@apexdynamics.com",
+            password="password123",
+            role=User.Role.CLIENT,
+            client=self.org,
+        )
+
+        # Approver user
+        self.approver_user = User.objects.create_user(
+            username="approver_user",
+            email="approver@apexdynamics.com",
+            password="password123",
+            role=User.Role.APPROVER,
+            client=self.org,
+        )
+
+        # Assigned support agent
+        self.assigned_agent = User.objects.create_user(
+            username="nagaraj_agent",
+            email="nagaraj@servicesphere.com",
+            password="password123",
+            role=User.Role.SUPPORT_AGENT,
+        )
+
+        # Unassigned support agent
+        self.unassigned_agent = User.objects.create_user(
+            username="unassigned_agent",
+            email="unassigned@servicesphere.com",
+            password="password123",
+            role=User.Role.SUPPORT_AGENT,
+        )
+
+        # System Administrator
+        self.admin_user = User.objects.create_superuser(
+            username="admin_boss",
+            email="boss@servicesphere.com",
+            password="password123",
+            role=User.Role.ADMIN,
+        )
+
+        # Primary test ticket belonging to Apex Dynamics, assigned to nagaraj_agent
+        self.ticket = Ticket.objects.create(
+            client=self.org,
+            created_by=self.client_user,
+            assigned_to=self.assigned_agent,
+            subject="Dashboard login error",
+            description="The dashboard displays an error after login.",
+            category="Technical Support",
+            status=Ticket.Status.IN_PROGRESS,
+        )
+
+        # Public comment written by client
+        self.public_comment = TicketComment.objects.create(
+            ticket=self.ticket,
+            author=self.client_user,
+            message="The dashboard is showing an error when I try to log in.",
+            is_internal=False,
+        )
+
+        # Internal note written by assigned agent
+        self.internal_note = TicketComment.objects.create(
+            ticket=self.ticket,
+            author=self.assigned_agent,
+            message="Investigate the authentication service logs.",
+            is_internal=True,
+        )
+
+    def test_client_can_add_comment_to_own_ticket(self):
+        """
+        Checklist item 1: Client can add public comments to its own organization's ticket.
+        """
+        self.client.force_authenticate(user=self.client_user)
+
+        payload = {
+            "message": "I've attached the error details. Please check.",
+            "is_internal": False,
+        }
+        response = self.client.post(f"/api/tickets/{self.ticket.id}/comments/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["message"], payload["message"])
+        self.assertEqual(response.data["author_username"], self.client_user.username)
+        self.assertFalse(response.data["is_internal"])
+
+    def test_client_can_retrieve_public_comments(self):
+        """
+        Checklist item 2: Client can retrieve public comments.
+        """
+        self.client.force_authenticate(user=self.client_user)
+
+        response = self.client.get(f"/api/tickets/{self.ticket.id}/comments/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        messages = [c["message"] for c in response.data]
+        self.assertIn("The dashboard is showing an error when I try to log in.", messages)
+
+    def test_client_cannot_see_internal_notes(self):
+        """
+        Checklist item 3: Client cannot see internal notes.
+        """
+        self.client.force_authenticate(user=self.client_user)
+
+        response = self.client.get(f"/api/tickets/{self.ticket.id}/comments/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        messages = [c["message"] for c in response.data]
+        # Public comment is visible
+        self.assertIn(self.public_comment.message, messages)
+        # Internal note MUST NOT be visible to client
+        self.assertNotIn(self.internal_note.message, messages)
+
+    def test_client_cannot_create_internal_notes(self):
+        """
+        Checklist item 4: Client cannot create internal notes (forbidden with 403).
+        """
+        self.client.force_authenticate(user=self.client_user)
+
+        payload = {
+            "message": "Attempting to create an internal note as a client",
+            "is_internal": True,
+        }
+        response = self.client.post(f"/api/tickets/{self.ticket.id}/comments/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_assigned_agent_can_create_public_comments(self):
+        """
+        Checklist item 5: Assigned support agent can create public comments.
+        """
+        self.client.force_authenticate(user=self.assigned_agent)
+
+        payload = {
+            "message": "We are investigating the issue. Could you share a screenshot of the error?",
+            "is_internal": False,
+        }
+        response = self.client.post(f"/api/tickets/{self.ticket.id}/comments/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["author_username"], self.assigned_agent.username)
+        self.assertFalse(response.data["is_internal"])
+
+    def test_assigned_agent_can_create_internal_notes(self):
+        """
+        Checklist item 6: Assigned support agent can create internal notes.
+        """
+        self.client.force_authenticate(user=self.assigned_agent)
+
+        payload = {
+            "message": "Found issue in token expiration middleware.",
+            "is_internal": True,
+        }
+        response = self.client.post(f"/api/tickets/{self.ticket.id}/comments/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["is_internal"])
+
+    def test_unassigned_support_agent_cannot_access_ticket_conversation(self):
+        """
+        Checklist item 7: Unassigned support agent cannot access the ticket conversation (403 Forbidden).
+        """
+        self.client.force_authenticate(user=self.unassigned_agent)
+
+        # GET attempt
+        get_response = self.client.get(f"/api/tickets/{self.ticket.id}/comments/")
+        self.assertEqual(get_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        # POST attempt
+        post_response = self.client.post(
+            f"/api/tickets/{self.ticket.id}/comments/",
+            {"message": "Unauthorized comment attempt"},
+        )
+        self.assertEqual(post_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_approver_can_view_public_comments_but_cannot_add_comments(self):
+        """
+        Checklist item 8: Approver can view public comments but cannot add comments.
+        """
+        self.client.force_authenticate(user=self.approver_user)
+
+        # Viewing comments: permitted
+        get_response = self.client.get(f"/api/tickets/{self.ticket.id}/comments/")
+        self.assertEqual(get_response.status_code, status.HTTP_200_OK)
+        messages = [c["message"] for c in get_response.data]
+        self.assertIn(self.public_comment.message, messages)
+        self.assertNotIn(self.internal_note.message, messages)
+
+        # Adding comments: forbidden with 403
+        post_response = self.client.post(
+            f"/api/tickets/{self.ticket.id}/comments/",
+            {"message": "Approver trying to write a comment"},
+        )
+        self.assertEqual(post_response.status_code, status.HTTP_403_FORBIDDEN)

@@ -12,3 +12,9 @@ psycopg2-binary
 
 # Loads environment variables from a .env file
 python-dotenv
+
+# 
+celery
+
+# 
+redis
