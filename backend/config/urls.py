@@ -38,4 +38,7 @@ urlpatterns = [
 
     # In-app and email notifications, preferences, and counters
     path("api/notifications/", include("notifications.urls")),
+
+    # Knowledge Base categories, articles, ticket linking, and revision auditing
+    path("api/knowledge/", include("knowledge_base.urls")),
 ]

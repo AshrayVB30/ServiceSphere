@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     "approvals",                     # Ticket approvals, decision history, and authorization workflows
     "sla",                           # Service Level Agreements, deadline monitoring, and escalations
     "notifications",                 # In-app and email notification management and delivery
+    "knowledge_base",                # Knowledge Base articles, categories, revisions, and ticket linking
 ]
 
 
