@@ -41,4 +41,7 @@ urlpatterns = [
 
     # Knowledge Base categories, articles, ticket linking, and revision auditing
     path("api/knowledge/", include("knowledge_base.urls")),
+
+    # Analytics, agent performance, SLA metrics, KPI & KRA tracking, and reports
+    path("api/analytics/", include("analytics.urls")),
 ]

@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "sla",                           # Service Level Agreements, deadline monitoring, and escalations
     "notifications",                 # In-app and email notification management and delivery
     "knowledge_base",                # Knowledge Base articles, categories, revisions, and ticket linking
+    "analytics",                     # Ticket & agent analytics, SLA metrics, KPI & KRA tracking, reports
 ]
 
 
@@ -224,6 +225,13 @@ REST_FRAMEWORK = {
         # Requires the user to be logged in (authenticated) for all API endpoints
         # unless an individual view explicitly declares different permissions.
         "rest_framework.permissions.IsAuthenticated",
+    ],
+
+    # Default renderer classes supporting JSON, browsable HTML, and dynamic RFC 4180 CSV streaming (?format=csv)
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
+        "analytics.renderers.PassthroughCSVRenderer",
     ],
 }
 
