@@ -12,9 +12,11 @@ Exposes RESTful endpoints for:
 
 # Import Decimal formatting utilities
 from decimal import Decimal
+from django.db.models import Avg
 
-# Import Django REST Framework views and status codes
+# Import Django REST Framework views, actions and status codes
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -192,12 +194,95 @@ class TicketTrendsView(APIView):
     Returns daily timeline series of created vs. resolved tickets.
     """
     permission_classes = [IsInternalStaffUser]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, PassthroughCSVRenderer]
 
     def get(self, request):
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
         timeline = get_ticket_trends(start_date, end_date)
         return Response({"timeline": timeline}, status=status.HTTP_200_OK)
+
+
+class TicketSummaryView(APIView):
+    """
+    GET /api/analytics/tickets/summary/
+    Detailed ticket summary metrics: total, active, completed, completion rate, and status breakdown.
+    """
+    permission_classes = [IsInternalStaffUser]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, PassthroughCSVRenderer]
+
+    def get(self, request):
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+        fmt = request.query_params.get("format", "json").lower()
+        summary = get_ticket_summary(start_date, end_date)
+
+        if fmt == "csv":
+            rows = []
+            for st, count in summary["status_breakdown"].items():
+                rows.append({
+                    "Metric": st.replace("_", " ").title(),
+                    "Count": count,
+                })
+            return export_to_csv(rows, ["Metric", "Count"], filename="ticket_summary.csv")
+
+        return Response(summary, status=status.HTTP_200_OK)
+
+
+class TicketByPriorityView(APIView):
+    """
+    GET /api/analytics/tickets/by-priority/
+    Ticket counts and proportions grouped by priority level (LOW, MEDIUM, HIGH, URGENT).
+    """
+    permission_classes = [IsInternalStaffUser]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, PassthroughCSVRenderer]
+
+    def get(self, request):
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+        fmt = request.query_params.get("format", "json").lower()
+        by_priority = get_tickets_by_priority(start_date, end_date)
+
+        if fmt == "csv":
+            rows = [
+                {
+                    "Priority": p["priority_display"],
+                    "Count": p["count"],
+                    "Percentage": p["percentage"],
+                }
+                for p in by_priority
+            ]
+            return export_to_csv(rows, ["Priority", "Count", "Percentage"], filename="tickets_by_priority.csv")
+
+        return Response({"by_priority": by_priority}, status=status.HTTP_200_OK)
+
+
+class TicketByCategoryView(APIView):
+    """
+    GET /api/analytics/tickets/by-category/
+    Ticket counts and proportions grouped by functional category.
+    """
+    permission_classes = [IsInternalStaffUser]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, PassthroughCSVRenderer]
+
+    def get(self, request):
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+        fmt = request.query_params.get("format", "json").lower()
+        by_category = get_tickets_by_category(start_date, end_date)
+
+        if fmt == "csv":
+            rows = [
+                {
+                    "Category": c["category"],
+                    "Count": c["count"],
+                    "Percentage": c["percentage"],
+                }
+                for c in by_category
+            ]
+            return export_to_csv(rows, ["Category", "Count", "Percentage"], filename="tickets_by_category.csv")
+
+        return Response({"by_category": by_category}, status=status.HTTP_200_OK)
 
 
 # ==============================================================================
@@ -260,10 +345,12 @@ class AgentLeaderboardView(APIView):
 class AgentPerformanceDetailView(APIView):
     """
     GET /api/analytics/agents/<int:agent_id>/
+    GET /api/analytics/agents/<int:agent_id>/performance/
     Detailed performance scorecard for an individual support agent.
     Support Agents can only view their own scorecards; Admins can view any agent.
     """
     permission_classes = [CanViewAgentAnalytics]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, PassthroughCSVRenderer]
 
     def get(self, request, agent_id):
         start_date = request.query_params.get("start_date")
@@ -277,6 +364,43 @@ class AgentPerformanceDetailView(APIView):
             )
 
         return Response(data, status=status.HTTP_200_OK)
+
+
+class AgentWorkloadView(APIView):
+    """
+    GET /api/analytics/agents/workload/
+    Current active ticket workload distribution across support agents.
+    Only accessible by Administrators. Supports CSV export (?format=csv).
+    """
+    permission_classes = [CanViewAgentAnalytics]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, PassthroughCSVRenderer]
+
+    def get(self, request):
+        fmt = request.query_params.get("format", "json").lower()
+        data = get_agent_leaderboard()
+        workload_data = [
+            {
+                "agent_id": item["agent_id"],
+                "username": item["username"],
+                "full_name": item["full_name"],
+                "pending_tickets": item["pending_tickets"],
+                "workload_distribution_percentage": item["workload_distribution_percentage"],
+            }
+            for item in data["leaderboard"]
+        ]
+
+        if fmt == "csv":
+            fieldnames = ["agent_id", "username", "full_name", "pending_tickets", "workload_distribution_percentage"]
+            return export_to_csv(workload_data, fieldnames, filename="agent_workload_distribution.csv")
+
+        return Response(
+            {
+                "total_active_workload": data["total_active_workload"],
+                "agents_count": data["agents_count"],
+                "workload": workload_data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # ==============================================================================
@@ -331,6 +455,44 @@ class SLAAnalyticsView(APIView):
         return Response(
             {
                 "summary": summary,
+                "by_priority": by_priority,
+                "by_agent": by_agent,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class SLASummaryView(APIView):
+    """
+    GET /api/analytics/sla/summary/
+    Consolidated SLA summary: total governed, compliant, breached, compliance %, overdue count,
+    and average response/resolution hours.
+    """
+    permission_classes = [IsInternalStaffUser]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, PassthroughCSVRenderer]
+
+    def get(self, request):
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+        summary = get_sla_summary(start_date, end_date)
+        return Response(summary, status=status.HTTP_200_OK)
+
+
+class SLAComplianceView(APIView):
+    """
+    GET /api/analytics/sla/compliance/
+    SLA compliance metrics grouped by priority tier and assigned agent.
+    """
+    permission_classes = [IsInternalStaffUser]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, PassthroughCSVRenderer]
+
+    def get(self, request):
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+        by_priority = get_sla_breakdown_by_priority(start_date, end_date)
+        by_agent = get_sla_breakdown_by_agent(start_date, end_date)
+        return Response(
+            {
                 "by_priority": by_priority,
                 "by_agent": by_agent,
             },
@@ -409,6 +571,36 @@ class KRAViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_active=is_act)
         return qs
 
+    @action(detail=True, methods=["get"], permission_classes=[CanManageKPIs])
+    def performance(self, request, pk=None):
+        """
+        GET /api/analytics/kras/{id}/performance/
+        Aggregates performance history across all active KPIs defined under this KRA.
+        """
+        kra = self.get_object()
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+
+        qs = KPIPerformanceRecord.objects.filter(assignment__kpi__kra=kra)
+        if start_date:
+            qs = qs.filter(period_start__gte=start_date)
+        if end_date:
+            qs = qs.filter(period_end__lte=end_date)
+
+        avg_achievement = qs.aggregate(avg=Avg("achievement_percentage"))["avg"] or Decimal("0.00")
+
+        return Response(
+            {
+                "kra_id": kra.id,
+                "kra_name": kra.name,
+                "weightage": kra.weightage,
+                "kpis_count": kra.kpis.filter(is_active=True).count(),
+                "total_evaluations": qs.count(),
+                "average_achievement_percentage": float(round(Decimal(str(avg_achievement)), 2)),
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class KPIViewSet(viewsets.ModelViewSet):
     """
@@ -433,6 +625,38 @@ class KPIViewSet(viewsets.ModelViewSet):
             is_act = active.lower() in ["true", "1"]
             qs = qs.filter(is_active=is_act)
         return qs
+
+    @action(detail=True, methods=["get"], permission_classes=[CanManageKPIs])
+    def performance(self, request, pk=None):
+        """
+        GET /api/analytics/kpis/{id}/performance/
+        Returns performance evaluation history for this specific KPI.
+        """
+        kpi = self.get_object()
+        qs = KPIPerformanceRecord.objects.filter(assignment__kpi=kpi).select_related(
+            "assignment__agent", "evaluated_by"
+        ).order_by("-period_end")
+
+        agent_id = request.query_params.get("agent")
+        if agent_id:
+            qs = qs.filter(assignment__agent_id=agent_id)
+
+        serializer = KPIPerformanceRecordSerializer(qs, many=True)
+        avg_achievement = qs.aggregate(avg=Avg("achievement_percentage"))["avg"] or Decimal("0.00")
+
+        return Response(
+            {
+                "kpi_id": kpi.id,
+                "kpi_name": kpi.name,
+                "metric_type": kpi.metric_type,
+                "target_direction": kpi.target_direction,
+                "default_target_value": float(kpi.default_target_value),
+                "average_achievement_percentage": float(round(Decimal(str(avg_achievement)), 2)),
+                "records_count": qs.count(),
+                "records": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class KRAAssignmentViewSet(viewsets.ModelViewSet):
@@ -707,4 +931,38 @@ class ExportKPIReportView(APIView):
             "Created At",
         ]
         return export_to_csv(rows, fieldnames, filename="kpi_performance_records.csv")
+
+
+class ExportKRAReportView(APIView):
+    """
+    GET /api/analytics/reports/kras/
+    Exports Key Result Areas (KRAs) definitions, weightages, objectives, and active status to CSV.
+    """
+    permission_classes = [IsInternalStaffUser]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, PassthroughCSVRenderer]
+
+    def get(self, request):
+        qs = KRA.objects.all().order_by("name")
+        rows = []
+        for k in qs:
+            rows.append({
+                "KRA ID": k.id,
+                "Name": k.name,
+                "Code": k.code,
+                "Weightage (%)": k.weightage,
+                "Measurable Objective": k.measurable_objective,
+                "Is Active": "Yes" if k.is_active else "No",
+                "Created At": k.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            })
+
+        fieldnames = [
+            "KRA ID",
+            "Name",
+            "Code",
+            "Weightage (%)",
+            "Measurable Objective",
+            "Is Active",
+            "Created At",
+        ]
+        return export_to_csv(rows, fieldnames, filename="kra_definitions_report.csv")
 

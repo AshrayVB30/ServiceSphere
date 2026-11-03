@@ -6,10 +6,12 @@ Included under the '/api/' prefix in config/urls.py.
 """
 
 from django.urls import path
-from .views import health_check
+from .views import health_check, liveness_check
 
 urlpatterns = [
-    # Maps GET /api/health/ to the health_check view function.
-    # name="health-check" allows referencing this URL dynamically via reverse("health-check").
+    # Maps GET /api/health/ to the deep health check view function.
     path("health/", health_check, name="health-check"),
+
+    # Maps GET /api/health/liveness/ to the lightweight liveness probe.
+    path("health/liveness/", liveness_check, name="health-liveness"),
 ]

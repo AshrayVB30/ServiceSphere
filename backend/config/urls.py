@@ -21,6 +21,9 @@ urlpatterns = [
     # Allows non-staff users (e.g. Clients, Approvers) to log in directly via the browser.
     path("api-auth/", include("rest_framework.urls")),
 
+    # Dedicated REST authentication endpoints (login, logout, me, csrf, password-change)
+    path("api/auth/", include("accounts.urls")),
+
     # Core shared endpoints (health-check, system status)
     path("api/", include("core.urls")),
 

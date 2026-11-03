@@ -20,9 +20,11 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AgentLeaderboardView,
     AgentPerformanceDetailView,
+    AgentWorkloadView,
     DashboardSummaryView,
     ExportAgentPerformanceReportView,
     ExportKPIReportView,
+    ExportKRAReportView,
     ExportSLAReportView,
     ExportTicketsReportView,
     KPIAssignmentViewSet,
@@ -33,7 +35,12 @@ from .views import (
     KRAViewSet,
     SLAAnalyticsView,
     SLABreachesView,
+    SLAComplianceView,
+    SLASummaryView,
     TicketAnalyticsView,
+    TicketByCategoryView,
+    TicketByPriorityView,
+    TicketSummaryView,
     TicketTrendsView,
 )
 
@@ -55,18 +62,25 @@ urlpatterns = [
 
     # Ticket volume, priority, and category metrics (/api/analytics/tickets/)
     path("tickets/", TicketAnalyticsView.as_view(), name="analytics-tickets"),
+    path("tickets/summary/", TicketSummaryView.as_view(), name="analytics-tickets-summary"),
+    path("tickets/by-priority/", TicketByPriorityView.as_view(), name="analytics-tickets-by-priority"),
+    path("tickets/by-category/", TicketByCategoryView.as_view(), name="analytics-tickets-by-category"),
 
     # Daily ticket creation vs resolution timeline trends (/api/analytics/tickets/trends/)
     path("tickets/trends/", TicketTrendsView.as_view(), name="analytics-tickets-trends"),
 
-    # Support agent performance leaderboard (/api/analytics/agents/)
+    # Support agent performance leaderboard & workload (/api/analytics/agents/)
     path("agents/", AgentLeaderboardView.as_view(), name="analytics-agents-leaderboard"),
+    path("agents/workload/", AgentWorkloadView.as_view(), name="analytics-agents-workload"),
 
-    # Individual support agent performance scorecard (/api/analytics/agents/<int:agent_id>/)
+    # Individual support agent performance scorecard
     path("agents/<int:agent_id>/", AgentPerformanceDetailView.as_view(), name="analytics-agent-detail"),
+    path("agents/<int:agent_id>/performance/", AgentPerformanceDetailView.as_view(), name="analytics-agent-detail-perf"),
 
     # SLA compliance summary and breakdowns (/api/analytics/sla/)
     path("sla/", SLAAnalyticsView.as_view(), name="analytics-sla"),
+    path("sla/summary/", SLASummaryView.as_view(), name="analytics-sla-summary"),
+    path("sla/compliance/", SLAComplianceView.as_view(), name="analytics-sla-compliance"),
 
     # Granular list of tickets that breached SLA deadlines (/api/analytics/sla/breaches/)
     path("sla/breaches/", SLABreachesView.as_view(), name="analytics-sla-breaches"),
@@ -79,6 +93,7 @@ urlpatterns = [
     path("reports/agents/", ExportAgentPerformanceReportView.as_view(), name="analytics-export-agents"),
     path("reports/sla/", ExportSLAReportView.as_view(), name="analytics-export-sla"),
     path("reports/kpis/", ExportKPIReportView.as_view(), name="analytics-export-kpis"),
+    path("reports/kras/", ExportKRAReportView.as_view(), name="analytics-export-kras"),
 
     # ModelViewSet routes (KRAs, KPIs, Assignments, Records)
     path("", include(router.urls)),

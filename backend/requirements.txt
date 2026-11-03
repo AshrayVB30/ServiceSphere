@@ -1,20 +1,29 @@
-# Web framework for building the Django application
-django
+# ==============================================================================
+# ServiceSphere - Pinned Production Dependencies
+# Python: 3.12+ | Database: PostgreSQL 18
+# ==============================================================================
 
-# Toolkit for creating RESTful APIs in Django
-djangorestframework
+# Core Web Framework
+Django==6.1.2
 
-# Enables Cross-Origin Resource Sharing (CORS) for frontend-backend communication
-django-cors-headers
+# REST API Framework
+djangorestframework==3.18.3
 
-# PostgreSQL database adapter for Python and Django
-psycopg2-binary
+# Cross-Origin Resource Sharing (CORS) Headers for Frontend Integration
+django-cors-headers==4.9.0
 
-# Loads environment variables from a .env file
-python-dotenv
+# PostgreSQL Database Adapter
+psycopg2-binary==2.9.13
 
-# 
-celery
+# Environment Variable Management
+python-dotenv==1.2.4
 
-# 
-redis
+# Distributed Task Queue & Broker Client
+celery==5.6.3
+redis==8.1.0
+
+# Asynchronous & Database Utilities
+asgiref==3.13.0
+sqlparse==0.6.0
+python-dateutil==3.0.0
+tzdata==2026.6

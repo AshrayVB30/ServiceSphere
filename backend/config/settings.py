@@ -27,13 +27,19 @@ load_dotenv(BASE_DIR.parent / ".env")
 # SECURITY CONFIGURATION
 # ==============================================================================
 
-# SECRET_KEY is used for cryptographic signing (sessions, password resets, tokens).
-# In production, this must remain secret and loaded strictly from environment variables.
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-development-key")
-
 # DEBUG mode enables detailed error traceback pages in the browser.
 # MUST always be False in production to prevent leaking sensitive code and data.
 DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
+
+# SECRET_KEY is used for cryptographic signing (sessions, password resets, tokens).
+# In production, this must remain secret and loaded strictly from environment variables.
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "insecure-dev-only-secret-key-change-in-production"
+    else:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY environment variable is mandatory when DEBUG=False.")
 
 # ALLOWED_HOSTS defines which host/domain names this Django site can serve.
 # This prevents HTTP Host header attacks.
@@ -48,6 +54,46 @@ ALLOWED_HOSTS = [
 # Ensure testserver is always allowed for testing and APIClient in shell
 if "testserver" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append("testserver")
+
+# Cross-Origin Resource Sharing (CORS) Configuration
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if not CORS_ALLOWED_ORIGINS and DEBUG:
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+CORS_ALLOW_CREDENTIALS = True
+
+# CSRF Trusted Origins (Required for Django 4.0+ across domains and reverse proxies)
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if not CSRF_TRUSTED_ORIGINS and DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
+# HTTPS, SSL & Cookie Security Flags (Configurable via environment variables)
+SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "False").lower() == "true"
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "False").lower() == "true"
+CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", "False").lower() == "true"
+SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv("SECURE_HSTS_INCLUDE_SUBDOMAINS", "False").lower() == "true"
+SECURE_HSTS_PRELOAD = os.getenv("SECURE_HSTS_PRELOAD", "False").lower() == "true"
+
+# Standard HTTP Cookie and Browser Hardening
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
 
 
 # ==============================================================================
@@ -181,10 +227,16 @@ USE_TZ = True
 
 
 # ==============================================================================
-# STATIC FILES (CSS, JavaScript, Images)
+# STATIC & MEDIA FILES (CSS, JavaScript, Images, Uploads)
 # ==============================================================================
 # Base URL path used in HTML templates to refer to static files.
 STATIC_URL = "static/"
+# Directory where 'collectstatic' gathers all static files for production web server
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Media files (attachments, uploads)
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 
 # ==============================================================================
@@ -226,6 +278,18 @@ REST_FRAMEWORK = {
         # unless an individual view explicitly declares different permissions.
         "rest_framework.permissions.IsAuthenticated",
     ],
+
+    # API Rate Limiting & Denial-of-Service (DoS) Throttling
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.getenv("THROTTLE_ANON_RATE", "100/minute"),
+        "user": os.getenv("THROTTLE_USER_RATE", "1000/minute"),
+        "auth": os.getenv("THROTTLE_AUTH_RATE", "20/minute"),
+        "reports": os.getenv("THROTTLE_REPORTS_RATE", "60/minute"),
+    },
 
     # Default renderer classes supporting JSON, browsable HTML, and dynamic RFC 4180 CSV streaming (?format=csv)
     "DEFAULT_RENDERER_CLASSES": [
@@ -269,5 +333,74 @@ CELERY_BEAT_SCHEDULE = {
     "monitor-sla-deadlines-every-5-minutes": {
         "task": "sla.tasks.monitor_sla_deadlines_task",
         "schedule": 300.0,
+    },
+}
+
+
+# ==============================================================================
+# LOGGING & AUDIT CONFIGURATION
+# ==============================================================================
+LOGS_DIR = BASE_DIR / "logs"
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} [{name}:{lineno}] {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "simple" if DEBUG else "verbose",
+        },
+        "app_file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOGS_DIR / "servicesphere.log"),
+            "maxBytes": 10 * 1024 * 1024,  # 10 MB per file
+            "backupCount": 5,
+            "formatter": "verbose",
+            "encoding": "utf-8",
+        },
+        "security_file": {
+            "level": "WARNING",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOGS_DIR / "security.log"),
+            "maxBytes": 10 * 1024 * 1024,  # 10 MB per file
+            "backupCount": 5,
+            "formatter": "verbose",
+            "encoding": "utf-8",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "app_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.security": {
+            "handlers": ["console", "security_file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console", "security_file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "servicesphere": {
+            "handlers": ["console", "app_file", "security_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }

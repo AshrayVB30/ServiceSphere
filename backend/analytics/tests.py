@@ -364,6 +364,27 @@ class TicketAnalyticsTests(AnalyticsBaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["summary"]["total_tickets"], 3)
 
+    def test_granular_ticket_summary_endpoint(self):
+        """GET /api/analytics/tickets/summary/ returns ticket summary metrics."""
+        response = self.client.get("/api/analytics/tickets/summary/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["total_tickets"], 3)
+        self.assertEqual(response.data["active_tickets"], 2)
+
+    def test_granular_tickets_by_priority_endpoint(self):
+        """GET /api/analytics/tickets/by-priority/ returns priority distribution."""
+        response = self.client.get("/api/analytics/tickets/by-priority/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("by_priority", response.data)
+        self.assertEqual(len(response.data["by_priority"]), 2)
+
+    def test_granular_tickets_by_category_endpoint(self):
+        """GET /api/analytics/tickets/by-category/ returns category counts."""
+        response = self.client.get("/api/analytics/tickets/by-category/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("by_category", response.data)
+        self.assertEqual(len(response.data["by_category"]), 3)
+
 
 class AgentPerformanceAnalyticsTests(AnalyticsBaseTestCase):
     """
@@ -401,6 +422,19 @@ class AgentPerformanceAnalyticsTests(AnalyticsBaseTestCase):
         for agent_entry in leaderboard:
             self.assertEqual(agent_entry["pending_tickets"], 1)
             self.assertEqual(agent_entry["workload_distribution_percentage"], 50.0)
+
+    def test_granular_agent_workload_endpoint(self):
+        """GET /api/analytics/agents/workload/ returns workload distribution."""
+        response = self.client.get("/api/analytics/agents/workload/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["total_active_workload"], 2)
+        self.assertEqual(response.data["agents_count"], 2)
+
+    def test_agent_performance_subpath_endpoint(self):
+        """GET /api/analytics/agents/{id}/performance/ returns agent scorecard."""
+        response = self.client.get(f"/api/analytics/agents/{self.agent_1.id}/performance/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["agent_id"], self.agent_1.id)
 
 
 class SLAAnalyticsTests(AnalyticsBaseTestCase):
@@ -445,6 +479,20 @@ class SLAAnalyticsTests(AnalyticsBaseTestCase):
         self.assertEqual(med_tier["total_tickets"], 2)
         self.assertEqual(med_tier["breached_tickets"], 1)
         self.assertEqual(med_tier["compliance_percentage"], 50.0)
+
+    def test_granular_sla_summary_endpoint(self):
+        """GET /api/analytics/sla/summary/ returns SLA summary."""
+        response = self.client.get("/api/analytics/sla/summary/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["total_governed_tickets"], 3)
+        self.assertEqual(response.data["breached_tickets"], 1)
+
+    def test_granular_sla_compliance_endpoint(self):
+        """GET /api/analytics/sla/compliance/ returns compliance breakdown."""
+        response = self.client.get("/api/analytics/sla/compliance/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("by_priority", response.data)
+        self.assertIn("by_agent", response.data)
 
 
 class KPIAndKRAManagementTests(AnalyticsBaseTestCase):
@@ -562,6 +610,42 @@ class KPIAndKRAManagementTests(AnalyticsBaseTestCase):
         self.assertIsNotNone(record)
         self.assertEqual(record.evaluated_by, self.admin_user)
 
+    def test_kra_performance_action(self):
+        """GET /api/analytics/kras/{id}/performance/ aggregates performance under KRA."""
+        self.client.force_authenticate(user=self.admin_user)
+        # Create a performance record under kpi_res_rate (which belongs to kra_quality)
+        KPIPerformanceRecord.objects.create(
+            assignment=self.assignment_1,
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            target_value=Decimal("85.00"),
+            actual_value=Decimal("85.00"),
+            achievement_percentage=Decimal("100.00"),
+            evaluated_by=self.admin_user,
+        )
+        response = self.client.get(f"/api/analytics/kras/{self.kra_quality.id}/performance/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["kra_id"], self.kra_quality.id)
+        self.assertEqual(response.data["total_evaluations"], 1)
+        self.assertEqual(response.data["average_achievement_percentage"], 100.0)
+
+    def test_kpi_performance_action(self):
+        """GET /api/analytics/kpis/{id}/performance/ returns performance history."""
+        self.client.force_authenticate(user=self.admin_user)
+        KPIPerformanceRecord.objects.create(
+            assignment=self.assignment_1,
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            target_value=Decimal("85.00"),
+            actual_value=Decimal("85.00"),
+            achievement_percentage=Decimal("100.00"),
+            evaluated_by=self.admin_user,
+        )
+        response = self.client.get(f"/api/analytics/kpis/{self.kpi_res_rate.id}/performance/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["kpi_id"], self.kpi_res_rate.id)
+        self.assertEqual(response.data["records_count"], 1)
+
 
 class CSVExportTests(AnalyticsBaseTestCase):
     """
@@ -611,6 +695,16 @@ class CSVExportTests(AnalyticsBaseTestCase):
         content = response.content.decode("utf-8")
         self.assertIn("Ticket ID,Ticket Number,Client,Subject", content)
         self.assertIn("Database cluster latency", content)
+
+    def test_reports_kras_export(self):
+        """Direct report endpoint /api/analytics/reports/kras/ returns CSV."""
+        response = self.client.get("/api/analytics/reports/kras/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+
+        content = response.content.decode("utf-8")
+        self.assertIn("KRA ID,Name,Code,Weightage (%),Measurable Objective", content)
+        self.assertIn("Customer Satisfaction & Quality", content)
 
 
 class EdgeCasesAndZeroDivisionTests(TestCase):
