@@ -8,6 +8,8 @@ create, or alter other client organizations.
 
 from rest_framework.permissions import BasePermission
 
+from accounts.models import User
+
 
 class IsSystemAdmin(BasePermission):
     """
@@ -34,6 +36,6 @@ class IsSystemAdmin(BasePermission):
             and user.is_authenticated
             and (
                 user.is_superuser
-                or (user.is_staff and user.role == "ADMIN")
+                or (user.is_staff and user.role == User.Role.ADMIN)
             )
         )

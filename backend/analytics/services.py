@@ -324,6 +324,11 @@ def get_agent_performance(agent_id, start_date=None, end_date=None):
     )
 
     # Calculate average first response time in hours from SLA tracking
+    # NOTE: Durations are computed in Python rather than via database Avg(ExpressionWrapper(...))
+    # because cross-field duration arithmetic varies across DB engines and timezone handling.
+    # This approach is accurate but loads all responded tracking rows into memory.
+    # For deployments with > ~10,000 tracked tickets per agent, consider migrating to
+    # a database-level aggregation using ExpressionWrapper + DurationField (see Django docs).
     resp_qs = SLATracking.objects.filter(
         ticket__assigned_to=agent,
         actual_response_at__isnull=False,
@@ -408,7 +413,10 @@ def get_agent_leaderboard(start_date=None, end_date=None):
     agents = User.objects.filter(role=User.Role.SUPPORT_AGENT, is_active=True).order_by("username")
     leaderboard = []
 
-    # Get total global pending tickets to compute workload distribution
+    # Retrieve the global active ticket count for workload share calculations.
+    # NOTE: The loop below calls get_agent_performance() once per active agent (O(N) agent queries,
+    # each comprising ~5 sub-queries). This is efficient for support teams of < ~50 agents.
+    # For significantly larger teams, consider refactoring to a single annotated QuerySet.
     total_active_tickets = Ticket.objects.filter(
         status__in=[Ticket.Status.OPEN, Ticket.Status.IN_PROGRESS, Ticket.Status.AWAITING_CUSTOMER]
     ).count()
@@ -496,7 +504,9 @@ def get_sla_summary(start_date=None, end_date=None):
         resolution_deadline__lt=now,
     ).count()
 
-    # Average response duration in hours across all responded tickets
+    # Average response duration in hours across all responded tickets.
+    # NOTE: Same Python-side duration arithmetic as get_agent_performance().
+    # Acceptable for typical helpdesk volumes (< ~50,000 total SLA-tracked tickets).
     resp_durations = [
         (t.actual_response_at - t.ticket.created_at).total_seconds() / 3600.0
         for t in qs

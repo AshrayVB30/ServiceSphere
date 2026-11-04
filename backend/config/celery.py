@@ -25,7 +25,8 @@ except ImportError:
     app = None
 
 
-@app.task(bind=True, ignore_result=True)
-def debug_task(self):
-    """Debug task to test Celery worker connectivity."""
-    print(f"Request: {self.request!r}")
+if app is not None:
+    @app.task(bind=True, ignore_result=True)
+    def debug_task(self):
+        """Debug task to test Celery worker connectivity."""
+        print(f"Request: {self.request!r}")

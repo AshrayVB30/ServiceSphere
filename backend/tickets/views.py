@@ -22,24 +22,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import User
+# Shared admin check utility (avoids duplicating the same logic in tickets, approvals, and sla)
+from accounts.utils import is_system_admin
 from .comment_serializers import TicketCommentSerializer
 from .models import Ticket, TicketHistory, TicketComment
 from .serializers import TicketSerializer
-
-
-def is_system_admin(user):
-    """
-    Helper function to check if a user possesses system administrator privileges.
-    Returns True if the user is a Django superuser OR has is_staff=True with role='ADMIN'.
-    """
-    return bool(
-        user
-        and user.is_authenticated
-        and (
-            user.is_superuser
-            or (user.is_staff and user.role == User.Role.ADMIN)
-        )
-    )
 
 
 class TicketViewSet(viewsets.ModelViewSet):
@@ -135,12 +122,14 @@ class TicketViewSet(viewsets.ModelViewSet):
                 performed_by=user,
                 new_status=ticket.status,
             )
+            # Deferred imports below prevent circular dependency chains at module load time:
+            # tickets → sla → tickets would cause an ImportError if imported at the top.
+
             # Automatically assign active SLA policy and calculate initial deadlines
-            from sla.services import assign_sla_to_ticket
-            assign_sla_to_ticket(ticket)
+            from sla.services import assign_sla_to_ticket  # noqa: PLC0415            assign_sla_to_ticket(ticket)
 
             # Dispatch ticket creation notifications
-            from notifications.services import notify_ticket_created
+            from notifications.services import notify_ticket_created  # noqa: PLC0415
             notify_ticket_created(ticket)
 
     @action(detail=True, methods=["get", "post"], url_path="assign")
@@ -205,7 +194,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             )
 
             # Dispatch ticket assignment notification
-            from notifications.services import notify_ticket_assigned
+            from notifications.services import notify_ticket_assigned  # noqa: PLC0415
             notify_ticket_assigned(ticket, previous_assignee=previous_agent)
 
         return Response(TicketSerializer(ticket).data, status=status.HTTP_200_OK)
@@ -281,7 +270,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             ticket.save(update_fields=update_fields)
 
             # Evaluate SLA resolution / reopened metrics
-            from sla.services import record_ticket_resolution, record_ticket_reopened
+            from sla.services import record_ticket_resolution, record_ticket_reopened  # noqa: PLC0415
             if new_status in (Ticket.Status.RESOLVED, Ticket.Status.CLOSED):
                 record_ticket_resolution(ticket)
             elif new_status == Ticket.Status.IN_PROGRESS and previous_status in (Ticket.Status.RESOLVED, Ticket.Status.CLOSED):
@@ -298,7 +287,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             )
 
             # Dispatch ticket status update notification
-            from notifications.services import notify_ticket_status_changed
+            from notifications.services import notify_ticket_status_changed  # noqa: PLC0415
             notify_ticket_status_changed(
                 ticket=ticket,
                 previous_status=previous_status,
@@ -327,7 +316,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         if new_priority != previous_priority:
             ticket.priority = new_priority
             ticket.save(update_fields=["priority", "updated_at"])
-            from sla.services import assign_sla_to_ticket
+            from sla.services import assign_sla_to_ticket  # noqa: PLC0415
             assign_sla_to_ticket(ticket, recalculated=True, previous_priority=previous_priority)
 
         return Response(TicketSerializer(ticket).data, status=status.HTTP_200_OK)

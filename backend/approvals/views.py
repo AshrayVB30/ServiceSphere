@@ -23,23 +23,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
+# Shared admin check utility (avoids duplicating the same logic in tickets, approvals, and sla)
+from accounts.utils import is_system_admin
 from .models import ApprovalRequest, ApprovalRecord
 from .serializers import ApprovalRequestSerializer
-
-
-def is_system_admin(user):
-    """
-    Helper function checking if a user has platform administrator privileges.
-    Returns True for Django superusers and staff with role='ADMIN'.
-    """
-    return bool(
-        user
-        and user.is_authenticated
-        and (
-            user.is_superuser
-            or (user.is_staff and user.role == User.Role.ADMIN)
-        )
-    )
 
 
 class ApprovalRequestViewSet(viewsets.ModelViewSet):
@@ -135,7 +122,8 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
             )
 
             # Dispatch approval request notification
-            from notifications.services import notify_approval_submitted
+            # Deferred import prevents circular dependency: approvals → notifications → approvals
+            from notifications.services import notify_approval_submitted  # noqa: PLC0415
             notify_approval_submitted(approval_req)
 
     @action(detail=True, methods=["get", "post"], url_path="approve")
@@ -172,8 +160,8 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
                 comment=comment,
             )
 
-            # Dispatch approval decision notification
-            from notifications.services import notify_approval_decided
+            # Deferred import prevents circular dependency: approvals → notifications → approvals
+            from notifications.services import notify_approval_decided  # noqa: PLC0415
             notify_approval_decided(approval_req, decision="Approved", comment=comment)
 
         return Response(ApprovalRequestSerializer(approval_req).data, status=status.HTTP_200_OK)
@@ -212,8 +200,8 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
                 comment=comment,
             )
 
-            # Dispatch rejection notification
-            from notifications.services import notify_approval_decided
+            # Deferred import prevents circular dependency: approvals → notifications → approvals
+            from notifications.services import notify_approval_decided  # noqa: PLC0415
             notify_approval_decided(approval_req, decision="Rejected", comment=comment)
 
         return Response(ApprovalRequestSerializer(approval_req).data, status=status.HTTP_200_OK)
@@ -255,8 +243,8 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
                 comment=comment,
             )
 
-            # Dispatch information requested notification
-            from notifications.services import notify_approval_decided
+            # Deferred import prevents circular dependency: approvals → notifications → approvals
+            from notifications.services import notify_approval_decided  # noqa: PLC0415
             notify_approval_decided(approval_req, decision="Information Requested", comment=comment)
 
         return Response(ApprovalRequestSerializer(approval_req).data, status=status.HTTP_200_OK)
@@ -304,8 +292,8 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
                 comment=comment,
             )
 
-            # Dispatch resubmission notification
-            from notifications.services import notify_approval_resubmitted
+            # Deferred import prevents circular dependency: approvals → notifications → approvals
+            from notifications.services import notify_approval_resubmitted  # noqa: PLC0415
             notify_approval_resubmitted(approval_req)
 
         return Response(ApprovalRequestSerializer(approval_req).data, status=status.HTTP_200_OK)
