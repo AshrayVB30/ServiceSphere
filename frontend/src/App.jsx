@@ -1,19 +1,21 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import React from 'react';
+import { BrowserRouter } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
+import { AppRoutes } from './routes/AppRoutes';
 
-function App() {
-  const [count, setCount] = useState(0)
-
+/**
+ * ServiceSphere Root Application Component
+ * Sets up BrowserRouter, Global Toast Notifications, and Authentication Provider.
+ */
+export default function App() {
   return (
-    <>
-    <h1>Hi Everyone, </h1>
-    <img src="/logo.png" alt="logo" />
-    <p>This is ServiceSphere frontend is in devlopment phase. We will update it soon... </p>
-    </>
-  )
+    <BrowserRouter>
+      <ToastProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </ToastProvider>
+    </BrowserRouter>
+  );
 }
-
-export default App
