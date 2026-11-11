@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, BookOpen, Plus, Eye, ThumbsUp, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '../../components/common/Skeleton';
@@ -14,7 +14,7 @@ import knowledgeService from '../../services/knowledgeService';
 import { ROUTES } from '../../constants';
 
 export function KBHomePage() {
-  const { user, isAdmin, isAgent } = useAuth();
+  const { isAdmin, isAgent } = useAuth();
   const toast = useToast();
 
   const [categories, setCategories] = useState([]);
@@ -26,7 +26,7 @@ export function KBHomePage() {
   // Authoring modal
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [formTitle, setFormTitle] = useState('');
-  const [formCategory, setFormCategory] = useState('1');
+  const [formCategory, setFormCategory] = useState('');
   const [formSummary, setFormSummary] = useState('');
   const [formContent, setFormContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -36,32 +36,44 @@ export function KBHomePage() {
     try {
       const [catList, artList] = await Promise.all([
         knowledgeService.getCategories(),
-        knowledgeService.getArticles({ categoryId: selectedCat, search }),
+        knowledgeService.getArticles({ category: selectedCat, search }),
       ]);
       setCategories(catList);
       setArticles(artList);
+
+      if (catList.length > 0 && !formCategory) {
+        setFormCategory(String(catList[0].id));
+      }
     } finally {
       setLoading(false);
     }
-  }, [selectedCat, search]);
+  }, [selectedCat, search, formCategory]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
+  // Client-side category filtering safety guard
+  const filteredArticles = useMemo(() => {
+    if (selectedCat === 'ALL') return articles;
+    return articles.filter(
+      (a) =>
+        String(a.category) === String(selectedCat) ||
+        String(a.category_id) === String(selectedCat)
+    );
+  }, [articles, selectedCat]);
+
   const handleCreate = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const created = await knowledgeService.createArticle(
-        {
-          title: formTitle,
-          category_id: formCategory,
-          summary: formSummary,
-          content: formContent,
-        },
-        user
-      );
+      // Backend ArticleCreateUpdateSerializer expects 'category' (FK field name), not 'category_id'
+      const created = await knowledgeService.createArticle({
+        title: formTitle,
+        category: parseInt(formCategory, 10),
+        summary: formSummary,
+        content: formContent,
+      });
       setArticles((prev) => [created, ...prev]);
       toast.success('Article Published', `${formTitle} is now accessible in the repository.`);
       setIsCreateOpen(false);
@@ -143,7 +155,12 @@ export function KBHomePage() {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => setIsCreateOpen(true)}
+            onClick={() => {
+              if (categories.length > 0 && !formCategory) {
+                setFormCategory(String(categories[0].id));
+              }
+              setIsCreateOpen(true);
+            }}
             leftIcon={Plus}
           >
             Publish Article
@@ -157,30 +174,37 @@ export function KBHomePage() {
           Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-40 rounded-xl" />
           ))
-        ) : articles.length === 0 ? (
+        ) : filteredArticles.length === 0 ? (
           <div className="col-span-full text-center py-12 rounded-xl border border-dashed border-slate-200 bg-white">
             <BookOpen className="h-7 w-7 text-slate-300 mx-auto mb-2" />
-            <p className="text-xs text-slate-500">No documentation found matching your search query.</p>
+            <p className="text-xs text-slate-500">No documentation found matching this category or search filter.</p>
           </div>
         ) : (
-          articles.map((art) => (
+          filteredArticles.map((art) => (
             <Link
               key={art.id}
               to={ROUTES.KB_ARTICLE(art.id)}
               className="group block rounded-xl border border-slate-200/80 bg-white p-4.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:border-slate-300 hover:shadow-xs"
             >
               <div className="flex items-center justify-between mb-2.5">
-                <Badge variant="blue" size="sm">
-                  {art.category?.name}
-                </Badge>
+                <div className="flex items-center space-x-1.5">
+                  <Badge variant="blue" size="sm">
+                    {art.category_name || art.category?.name || 'Technical'}
+                  </Badge>
+                  {art.status !== 'PUBLISHED' && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                      Draft
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center space-x-2 text-xs text-slate-500">
                   <span className="flex items-center gap-1 font-mono">
                     <Eye className="h-3 w-3" />
-                    {art.views_count}
+                    {art.views_count != null ? art.views_count : 1}
                   </span>
                   <span className="flex items-center gap-1 font-mono">
                     <ThumbsUp className="h-3 w-3 text-emerald-600" />
-                    {art.helpful_count}
+                    {art.helpful_count != null ? art.helpful_count : 1}
                   </span>
                 </div>
               </div>
@@ -194,7 +218,7 @@ export function KBHomePage() {
               </p>
 
               <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>By {art.author}</span>
+                <span>By {art.author_username || art.author || 'Staff Specialist'}</span>
                 <span className="text-blue-600 font-medium inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
                   Read Runbook <ArrowRight className="h-3 w-3" />
                 </span>

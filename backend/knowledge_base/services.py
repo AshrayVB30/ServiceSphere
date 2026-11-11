@@ -177,15 +177,15 @@ def create_article_revision(article, revised_by):
 # ARTICLE MANAGEMENT SERVICES
 # ==============================================================================
 
-def create_article(author, category, title, summary, content, visibility=Article.Visibility.PUBLIC):
+def create_article(author, category, title, summary, content, visibility=Article.Visibility.PUBLIC, status=Article.Status.PUBLISHED):
     """
-    Creates a new article draft.
+    Creates a new knowledge base article.
 
     Validation rules:
     - Author must be an authenticated staff user.
     - Category must exist and be active.
     - Title, summary, and content must not be blank.
-    - Starts in DRAFT status by default.
+    - Status defaults to PUBLISHED so newly published articles are immediately live.
     """
     title_clean = title.strip()
     summary_clean = summary.strip()
@@ -204,6 +204,8 @@ def create_article(author, category, title, summary, content, visibility=Article
 
     slug = generate_unique_slug(Article, title_clean, max_length=280)
 
+    now = timezone.now() if status == Article.Status.PUBLISHED else None
+
     article = Article.objects.create(
         author=author,
         category=category,
@@ -211,8 +213,9 @@ def create_article(author, category, title, summary, content, visibility=Article
         slug=slug,
         summary=summary_clean,
         content=content_clean,
-        status=Article.Status.DRAFT,
+        status=status,
         visibility=visibility,
+        published_at=now,
     )
     return article
 

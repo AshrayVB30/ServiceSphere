@@ -10,6 +10,8 @@ from .views import (
     LoginAPIView,
     LogoutAPIView,
     PasswordChangeAPIView,
+    PasswordResetConfirmAPIView,
+    PasswordResetRequestAPIView,
     RegisterAPIView,
     UserProfileView,
 )
@@ -30,7 +32,11 @@ urlpatterns = [
     # CSRF Token Initialization
     path("csrf/", CSRFTokenView.as_view(), name="auth-csrf"),
 
-    # Password Change
+    # Password Change (Authenticated)
     path("change-password/", PasswordChangeAPIView.as_view(), name="auth-change-password"),
+
+    # Password Recovery (Public / Unauthenticated)
+    path("password-reset/", PasswordResetRequestAPIView.as_view(), name="auth-password-reset"),
+    path("password-reset-confirm/", PasswordResetConfirmAPIView.as_view(), name="auth-password-reset-confirm"),
 ]
 

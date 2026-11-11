@@ -21,6 +21,8 @@ export const ENDPOINTS = {
     LOGOUT: '/auth/logout/',
     ME: '/auth/me/',
     CHANGE_PASSWORD: '/auth/change-password/',
+    PASSWORD_RESET: '/auth/password-reset/',
+    PASSWORD_RESET_CONFIRM: '/auth/password-reset-confirm/',
   },
 
   // System Core Health (/api/health/)

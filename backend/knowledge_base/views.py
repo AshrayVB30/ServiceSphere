@@ -183,10 +183,13 @@ class ArticleViewSet(viewsets.ModelViewSet):
             if visibility_param and visibility_param in Article.Visibility.values:
                 queryset = queryset.filter(visibility=visibility_param)
 
-        # 2. Category filtering
-        category_param = self.request.query_params.get("category")
-        if category_param:
-            queryset = queryset.filter(category_id=category_param)
+        # 2. Category filtering (supports both 'category' and 'categoryId', ID or slug)
+        category_param = self.request.query_params.get("category") or self.request.query_params.get("categoryId")
+        if category_param and category_param.upper() != "ALL":
+            try:
+                queryset = queryset.filter(category_id=int(category_param))
+            except ValueError:
+                queryset = queryset.filter(category__slug__iexact=category_param)
 
         # 3. Author filtering
         author_param = self.request.query_params.get("author")

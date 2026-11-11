@@ -13,6 +13,7 @@ import { Skeleton } from '../components/common/Skeleton';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 
 // Lazy Loaded Dashboards & Feature Pages (Code-split)
 const AdminDashboard = lazy(() => import('../features/dashboard/AdminDashboard'));
@@ -78,6 +79,7 @@ export function AppRoutes() {
         <Route path={ROUTES.LOGIN} element={<LoginPage />} />
         <Route path={ROUTES.REGISTER} element={<RegisterPage />} />
         <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
+        <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
 
         {/* Authenticated Workspace Shell */}
         <Route

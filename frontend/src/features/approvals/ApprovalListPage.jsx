@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Check, X, HelpCircle, History, RotateCw, FileCheck, Clock, CheckCircle2 } from 'lucide-react';
+import { Check, X, HelpCircle, History, RotateCw, FileCheck, Clock, CheckCircle2, Plus } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Table } from '../../components/common/Table';
 import { Modal } from '../../components/common/Modal';
 import { Textarea } from '../../components/common/Textarea';
+import { Select } from '../../components/common/Select';
 import { StatusBadge } from '../../components/feedback/StatusBadge';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import approvalService from '../../services/approvalService';
+import ticketService from '../../services/ticketService';
 import { APPROVAL_STATUSES, ROUTES } from '../../constants';
 import { Link } from 'react-router-dom';
 
@@ -33,6 +35,12 @@ export function ApprovalListPage() {
   const [decisionComment, setDecisionComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // New Approval Request State
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [ticketsList, setTicketsList] = useState([]);
+  const [createTicketId, setCreateTicketId] = useState('');
+  const [createReason, setCreateReason] = useState('');
+
   const fetchApprovals = useCallback(async () => {
     setLoading(true);
     try {
@@ -46,6 +54,48 @@ export function ApprovalListPage() {
   useEffect(() => {
     fetchApprovals();
   }, [fetchApprovals]);
+
+  // Load tickets for the "Request Approval" modal
+  useEffect(() => {
+    async function loadTickets() {
+      try {
+        const list = await ticketService.getTickets();
+        setTicketsList(list);
+        if (list.length > 0 && !createTicketId) {
+          setCreateTicketId(String(list[0].id));
+        }
+      } catch {
+        setTicketsList([]);
+      }
+    }
+    if (isAdmin) {
+      loadTickets();
+    }
+  }, [isAdmin, createTicketId]);
+
+  const handleCreateRequest = async (e) => {
+    e.preventDefault();
+    if (!createTicketId || !createReason.trim()) {
+      toast.warning('Validation Error', 'Please select a ticket and provide a justification.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const created = await approvalService.createApproval({
+        ticket: parseInt(createTicketId, 10),
+        approver: user.id,
+        reason: createReason.trim(),
+      });
+      setApprovals((prev) => [created, ...prev]);
+      toast.success('Approval Requested', `Request submitted for Ticket #${createTicketId}.`);
+      setIsCreateOpen(false);
+      setCreateReason('');
+    } catch (err) {
+      toast.error('Failed to submit approval request', err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const metrics = useMemo(() => {
     const total = approvals.length;
@@ -221,9 +271,21 @@ export function ApprovalListPage() {
           </p>
         </div>
 
-        <Button variant="secondary" size="sm" onClick={fetchApprovals} leftIcon={RotateCw}>
-          Refresh Queue
-        </Button>
+        <div className="flex items-center space-x-2">
+          {isAdmin && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setIsCreateOpen(true)}
+              leftIcon={Plus}
+            >
+              Request Approval
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" onClick={fetchApprovals} leftIcon={RotateCw}>
+            Refresh Queue
+          </Button>
+        </div>
       </div>
 
       {/* Decision Summary Strip */}
@@ -375,6 +437,56 @@ export function ApprovalListPage() {
           )}
         </Modal>
       )}
+
+      {/* New Approval Request Modal */}
+      <Modal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        title="Initiate Operational Approval Request"
+        description="Submit an action or policy exemption requiring executive or managerial authorization."
+        size="md"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsCreateOpen(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={submitting}
+              onClick={handleCreateRequest}
+            >
+              Submit for Approval
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleCreateRequest} className="space-y-4">
+          <Select
+            label="Target Support Incident / Ticket"
+            options={ticketsList.map((t) => ({
+              value: String(t.id),
+              label: `${t.ticket_number} — ${t.subject}`,
+            }))}
+            value={createTicketId}
+            onChange={(e) => setCreateTicketId(e.target.value)}
+          />
+
+          <Textarea
+            label="Operational Justification & Reason"
+            placeholder="Describe why executive authorization is required (e.g., temporary rate limit raise, firewall rule modification, credit invoice)..."
+            rows={4}
+            required
+            value={createReason}
+            onChange={(e) => setCreateReason(e.target.value)}
+          />
+        </form>
+      </Modal>
     </div>
   );
 }

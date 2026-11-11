@@ -26,7 +26,15 @@ export const knowledgeService = {
    * @returns {Promise<Array<object>>} List of article summaries.
    */
   async getArticles(params = {}) {
-    const response = await apiClient.get(ENDPOINTS.KNOWLEDGE.ARTICLES, { params });
+    const query = {};
+    if (params.search?.trim()) query.search = params.search.trim();
+
+    const cat = params.category || params.categoryId;
+    if (cat && String(cat).toUpperCase() !== 'ALL') {
+      query.category = cat;
+    }
+
+    const response = await apiClient.get(ENDPOINTS.KNOWLEDGE.ARTICLES, { params: query });
     return response.data?.results || response.data || [];
   },
 
@@ -70,6 +78,24 @@ export const knowledgeService = {
    */
   async updateArticle(id, payload) {
     const response = await apiClient.patch(ENDPOINTS.KNOWLEDGE.ARTICLE_DETAIL(id), payload);
+    return response.data;
+  },
+
+  /**
+   * Publishes a draft article making it live for clients.
+   * Endpoint: POST /api/knowledge/articles/{id}/publish/
+   */
+  async publishArticle(id) {
+    const response = await apiClient.post(`${ENDPOINTS.KNOWLEDGE.ARTICLE_DETAIL(id)}publish/`);
+    return response.data;
+  },
+
+  /**
+   * Reverts a published article back to draft.
+   * Endpoint: POST /api/knowledge/articles/{id}/unpublish/
+   */
+  async unpublishArticle(id) {
+    const response = await apiClient.post(`${ENDPOINTS.KNOWLEDGE.ARTICLE_DETAIL(id)}unpublish/`);
     return response.data;
   },
 

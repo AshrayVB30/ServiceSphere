@@ -174,9 +174,9 @@ class TicketViewSet(viewsets.ModelViewSet):
         except (User.DoesNotExist, ValueError):
             raise ValidationError({"assigned_to": "User not found or is currently inactive."})
 
-        # Validate that the target user is actually a support agent
-        if agent.role != User.Role.SUPPORT_AGENT:
-            raise ValidationError({"assigned_to": "Tickets can only be assigned to users with the SUPPORT_AGENT role."})
+        # Validate that the target user is a support agent or system admin
+        if agent.role not in (User.Role.SUPPORT_AGENT, User.Role.ADMIN) and not agent.is_superuser:
+            raise ValidationError({"assigned_to": "Tickets can only be assigned to support agents or administrators."})
 
         # Perform assignment and record history atomically
         with transaction.atomic():

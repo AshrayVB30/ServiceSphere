@@ -20,6 +20,7 @@ import { Checkbox } from '../../components/common/Checkbox';
 import { StatusBadge } from '../../components/feedback/StatusBadge';
 import { PriorityBadge } from '../../components/feedback/PriorityBadge';
 import { Skeleton } from '../../components/common/Skeleton';
+import { MarkdownRenderer } from '../../components/common/MarkdownRenderer';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { ticketService } from '../../services/ticketService';
@@ -232,9 +233,7 @@ export function TicketDetailPage() {
         <div className="lg:col-span-2 space-y-5">
           {/* Issue Description Card */}
           <Card title="Incident Scope & Description">
-            <div className="prose prose-sm max-w-none text-xs text-slate-800 leading-relaxed whitespace-pre-line font-sans">
-              {ticket.description}
-            </div>
+            <MarkdownRenderer content={ticket.description} />
           </Card>
 
           {/* Activity / Conversation Tabs */}

@@ -3,21 +3,28 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { useToast } from '../../hooks/useToast';
+import { authService } from '../../services/authService';
 import { ROUTES } from '../../constants';
 
 export function ForgotPasswordPage() {
+  const toast = useToast();
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email) return;
+    if (!email.trim()) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await authService.requestPasswordReset(email.trim());
       setSubmitted(true);
-    }, 700);
+    } catch (err) {
+      toast.error('Password Reset Failed', err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

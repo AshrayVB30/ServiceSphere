@@ -121,6 +121,43 @@ export const authService = {
       });
     }
   },
+
+  /**
+   * Requests a password recovery link sent via email.
+   * Endpoint: POST /api/auth/password-reset/
+   */
+  async requestPasswordReset(email) {
+    await this.getCsrfToken().catch(() => {});
+    try {
+      const response = await apiClient.post(ENDPOINTS.AUTH.PASSWORD_RESET, { email });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.formattedMessage || 'Failed to submit password reset request.', {
+        cause: error,
+      });
+    }
+  },
+
+  /**
+   * Confirms and sets a new password using a token received via email.
+   * Endpoint: POST /api/auth/password-reset-confirm/
+   */
+  async confirmPasswordReset({ uid, token, new_password, new_password_confirm }) {
+    await this.getCsrfToken().catch(() => {});
+    try {
+      const response = await apiClient.post(ENDPOINTS.AUTH.PASSWORD_RESET_CONFIRM, {
+        uid,
+        token,
+        new_password,
+        new_password_confirm,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.formattedMessage || 'Password reset confirmation failed.', {
+        cause: error,
+      });
+    }
+  },
 };
 
 export default authService;

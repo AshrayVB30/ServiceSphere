@@ -243,3 +243,44 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.save()
         return user
 
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """
+    Validates email for initiating password recovery workflow.
+    """
+    email = serializers.EmailField(
+        required=True,
+        help_text="Registered email address to receive password reset link.",
+    )
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """
+    Validates base64 uid, cryptographic token, and new password matching rules.
+    """
+    uid = serializers.CharField(
+        required=True,
+        help_text="Base64-encoded user ID.",
+    )
+    token = serializers.CharField(
+        required=True,
+        help_text="Cryptographic one-time password reset token.",
+    )
+    new_password = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={"input_type": "password"},
+        help_text="New replacement password conforming to security policies.",
+    )
+    new_password_confirm = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={"input_type": "password"},
+        help_text="Re-type new password for confirmation.",
+    )
+
+    def validate(self, attrs):
+        if attrs.get("new_password") != attrs.get("new_password_confirm"):
+            raise serializers.ValidationError({"new_password_confirm": "Passwords do not match."})
+        return attrs
+
