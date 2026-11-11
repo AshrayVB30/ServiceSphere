@@ -2,23 +2,24 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import authService from '../services/authService';
 import { USER_ROLES } from '../constants';
 
+/**
+ * Authentication Context for ServiceSphere
+ * Manages user identity, RBAC authorization flags, and session hydration.
+ */
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isMockSession, setIsMockSession] = useState(false);
 
-  // Checks initial session on application mount
+  // Verifies active Django session on initial application mount
   const checkAuth = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { user: currentUser, isMock } = await authService.getMe();
+      const currentUser = await authService.getMe();
       setUser(currentUser);
-      setIsMockSession(isMock);
     } catch {
       setUser(null);
-      setIsMockSession(false);
     } finally {
       setIsLoading(false);
     }
@@ -27,10 +28,9 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     checkAuth();
 
-    // Listen for global 401 unauthorized events
+    // Listen for global 401 Unauthorized events emitted by apiClient response interceptor
     function handleUnauthorized() {
       setUser(null);
-      setIsMockSession(false);
     }
     window.addEventListener('servicesphere:unauthorized', handleUnauthorized);
     return () => {
@@ -38,25 +38,49 @@ export function AuthProvider({ children }) {
     };
   }, [checkAuth]);
 
+  /**
+   * Logs user in via Django REST session endpoint.
+   *
+   * @param {object} credentials - User credentials.
+   * @returns {Promise<object>} Logged in user profile.
+   */
   const login = async (credentials) => {
     setIsLoading(true);
     try {
-      const { user: loggedInUser, isMock } = await authService.login(credentials);
+      const loggedInUser = await authService.login(credentials);
       setUser(loggedInUser);
-      setIsMockSession(isMock);
       return loggedInUser;
     } finally {
       setIsLoading(false);
     }
   };
 
+  /**
+   * Registers a new account via Django REST session endpoint.
+   *
+   * @param {object} userData - User registration payload.
+   * @returns {Promise<object>} Registered user profile.
+   */
+  const register = async (userData) => {
+    setIsLoading(true);
+    try {
+      const registeredUser = await authService.register(userData);
+      setUser(registeredUser);
+      return registeredUser;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Logs user out on server and clears local context state.
+   */
   const logout = async () => {
     setIsLoading(true);
     try {
       await authService.logout();
     } finally {
       setUser(null);
-      setIsMockSession(false);
       setIsLoading(false);
     }
   };
@@ -66,12 +90,13 @@ export function AuthProvider({ children }) {
     role: user?.role || null,
     isAuthenticated: !!user,
     isLoading,
-    isMockSession,
-    isAdmin: user?.role === USER_ROLES.ADMIN || user?.is_superuser,
+    isMockSession: false,
+    isAdmin: user?.role === USER_ROLES.ADMIN || !!user?.is_superuser,
     isAgent: user?.role === USER_ROLES.SUPPORT_AGENT,
     isClient: user?.role === USER_ROLES.CLIENT,
     isApprover: user?.role === USER_ROLES.APPROVER,
     login,
+    register,
     logout,
     checkAuth,
   };
@@ -79,6 +104,11 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/**
+ * Hook to consume the ServiceSphere Authentication context.
+ *
+ * @returns {object} AuthContext state and helper methods.
+ */
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
@@ -88,4 +118,3 @@ export function useAuth() {
 }
 
 export default AuthContext;
-

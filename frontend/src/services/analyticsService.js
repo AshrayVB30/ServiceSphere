@@ -1,115 +1,166 @@
 import apiClient from './api';
 import { ENDPOINTS } from './endpoints';
 
+/**
+ * ServiceSphere Analytics, SLA Metrics & Reporting Service
+ * Communicates with Django REST APIs under /api/analytics/
+ */
 export const analyticsService = {
-  async getMetrics(params = {}) {
-    try {
-      const response = await apiClient.get(ENDPOINTS.ANALYTICS.DASHBOARD, { params });
-      return response.data;
-    } catch {
-      // Local comprehensive analytics calculation matching backend Phase 10 formulas
-      return {
-        summary: {
-          total_tickets: 142,
-          open_tickets: 18,
-          in_progress_tickets: 24,
-          resolved_tickets: 92,
-          closed_tickets: 8,
-          overdue_tickets: 2,
-          sla_compliance_rate: 97.4,
-          avg_first_response_hours: 1.25,
-          avg_resolution_hours: 4.8,
-          fcr_rate: 76.5,
-        },
-        ticket_trends: [
-          { date: 'Oct 29', created: 18, resolved: 14 },
-          { date: 'Oct 30', created: 22, resolved: 20 },
-          { date: 'Oct 31', created: 28, resolved: 26 },
-          { date: 'Nov 01', created: 24, resolved: 22 },
-          { date: 'Nov 02', created: 14, resolved: 16 },
-          { date: 'Nov 03', created: 19, resolved: 18 },
-          { date: 'Nov 04', created: 17, resolved: 16 },
-        ],
-        category_breakdown: [
-          { name: 'Technical Support', count: 52 },
-          { name: 'Bug / Defect', count: 34 },
-          { name: 'Billing', count: 26 },
-          { name: 'Feature Request', count: 18 },
-          { name: 'Account Access', count: 12 },
-        ],
-        agent_leaderboard: [
-          {
-            id: 2,
-            name: 'Sarah Connor',
-            assigned_count: 38,
-            resolved_count: 36,
-            workload_pct: 42.5,
-            avg_response_hours: 0.85,
-            avg_resolution_hours: 3.4,
-            sla_compliance_pct: 98.2,
-          },
-          {
-            id: 1,
-            name: 'Alex Vance',
-            assigned_count: 32,
-            resolved_count: 30,
-            workload_pct: 35.8,
-            avg_response_hours: 1.1,
-            avg_resolution_hours: 4.1,
-            sla_compliance_pct: 96.8,
-          },
-          {
-            id: 5,
-            name: 'David Lightman',
-            assigned_count: 19,
-            resolved_count: 18,
-            workload_pct: 21.7,
-            avg_response_hours: 1.6,
-            avg_resolution_hours: 5.2,
-            sla_compliance_pct: 95.0,
-          },
-        ],
-      };
-    }
+  /**
+   * Retrieves executive operational dashboard summary metrics.
+   * Endpoint: GET /api/analytics/dashboard/
+   *
+   * @param {object} [params] - Date filter parameters (start_date, end_date).
+   * @returns {Promise<object>} Dashboard operational metrics.
+   */
+  async getDashboardSummary(params = {}) {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.DASHBOARD, { params });
+    return response.data;
   },
 
   /**
-   * Generates and triggers browser download of analytical CSV report
+   * Retrieves comprehensive ticket metrics, status breakdown, and volume counts.
+   * Endpoint: GET /api/analytics/tickets/
+   *
+   * @param {object} [params] - Date boundaries.
+   * @returns {Promise<object>} Ticket metrics.
    */
-  exportCsv(data) {
-    const rows = [
-      ['ServiceSphere Enterprise Analytical Performance Report'],
-      ['Generated On', new Date().toISOString()],
-      [],
-      ['Metric', 'Value', 'Benchmark Target'],
-      ['Total Tickets Handled', data.summary.total_tickets, 'N/A'],
-      ['SLA Compliance Percentage', `${data.summary.sla_compliance_rate}%`, '> 95.0%'],
-      ['Average First Response Time', `${data.summary.avg_first_response_hours} hrs`, '< 2.0 hrs'],
-      ['Average Resolution Time', `${data.summary.avg_resolution_hours} hrs`, '< 8.0 hrs'],
-      ['First Contact Resolution (FCR)', `${data.summary.fcr_rate}%`, '> 70.0%'],
-      [],
-      ['Agent Name', 'Assigned Tickets', 'Resolved Tickets', 'Workload Share', 'Avg Response (hrs)', 'Avg Resolution (hrs)', 'SLA Compliance'],
-      ...data.agent_leaderboard.map((a) => [
-        a.name,
-        a.assigned_count,
-        a.resolved_count,
-        `${a.workload_pct}%`,
-        a.avg_response_hours,
-        a.avg_resolution_hours,
-        `${a.sla_compliance_pct}%`,
-      ]),
-    ];
+  async getTicketAnalytics(params = {}) {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.TICKETS, { params });
+    return response.data;
+  },
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((e) => e.join(',')).join('\n');
-    const encodedUri = encodeURI(csvContent);
+  /**
+   * Retrieves daily ticket creation vs resolution timeline trends.
+   * Endpoint: GET /api/analytics/tickets/trends/
+   *
+   * @param {object} [params] - Date filter parameters.
+   * @returns {Promise<Array<object>>} Daily trend data points.
+   */
+  async getTicketTrends(params = {}) {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.TICKETS_TRENDS, { params });
+    return response.data?.trends || response.data || [];
+  },
+
+  /**
+   * Retrieves ticket volume distribution grouped by priority.
+   * Endpoint: GET /api/analytics/tickets/by-priority/
+   *
+   * @param {object} [params] - Date boundaries.
+   * @returns {Promise<Array<object>>} Priority breakdown.
+   */
+  async getTicketsByPriority(params = {}) {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.TICKETS_BY_PRIORITY, { params });
+    return response.data?.by_priority || [];
+  },
+
+  /**
+   * Retrieves ticket volume distribution grouped by category.
+   * Endpoint: GET /api/analytics/tickets/by-category/
+   *
+   * @param {object} [params] - Date boundaries.
+   * @returns {Promise<Array<object>>} Category breakdown.
+   */
+  async getTicketsByCategory(params = {}) {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.TICKETS_BY_CATEGORY, { params });
+    return response.data?.by_category || [];
+  },
+
+  /**
+   * Retrieves support agent performance leaderboard.
+   * Endpoint: GET /api/analytics/agents/
+   *
+   * @param {object} [params] - Date boundaries.
+   * @returns {Promise<object>} Leaderboard data with ranked agents.
+   */
+  async getAgentLeaderboard(params = {}) {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.AGENTS, { params });
+    return response.data;
+  },
+
+  /**
+   * Retrieves active ticket workload distribution across support agents.
+   * Endpoint: GET /api/analytics/agents/workload/
+   *
+   * @returns {Promise<object>} Agent workload distribution data.
+   */
+  async getAgentWorkload() {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.AGENTS_WORKLOAD);
+    return response.data;
+  },
+
+  /**
+   * Retrieves SLA compliance summary, breach counts, and response/resolution averages.
+   * Endpoint: GET /api/analytics/sla/
+   *
+   * @param {object} [params] - Date boundaries.
+   * @returns {Promise<object>} SLA metrics summary.
+   */
+  async getSLAAnalytics(params = {}) {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.SLA, { params });
+    return response.data;
+  },
+
+  /**
+   * Retrieves Key Result Areas (KRAs).
+   * Endpoint: GET /api/analytics/kras/
+   *
+   * @returns {Promise<Array<object>>} List of KRAs.
+   */
+  async getKRAs() {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.KRAS);
+    return response.data?.results || response.data || [];
+  },
+
+  /**
+   * Retrieves Key Performance Indicators (KPIs).
+   * Endpoint: GET /api/analytics/kpis/
+   *
+   * @returns {Promise<Array<object>>} List of KPIs with target values.
+   */
+  async getKPIs() {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.KPIS);
+    return response.data?.results || response.data || [];
+  },
+
+  /**
+   * Executes automated KPI performance evaluation for an agent.
+   * Endpoint: POST /api/analytics/kpis/evaluate/
+   *
+   * @param {number} agentId - Support agent user ID.
+   * @param {string} evaluationPeriod - Evaluation period (e.g. 'MONTHLY', 'QUARTERLY').
+   * @returns {Promise<object>} Evaluation results.
+   */
+  async evaluateKPIs(agentId, evaluationPeriod) {
+    const response = await apiClient.post(ENDPOINTS.ANALYTICS.KPI_EVALUATE, {
+      agent_id: agentId,
+      evaluation_period: evaluationPeriod,
+    });
+    return response.data;
+  },
+
+  /**
+   * Downloads ticket analytics report in RFC 4180 CSV format generated server-side by Django.
+   * Endpoint: GET /api/analytics/tickets/?format=csv
+   *
+   * @param {object} [params] - Date boundaries.
+   * @returns {Promise<void>}
+   */
+  async exportTicketsCsv(params = {}) {
+    const response = await apiClient.get(ENDPOINTS.ANALYTICS.TICKETS, {
+      params: { ...params, format: 'csv' },
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `ServiceSphere_Report_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.href = url;
+    link.setAttribute('download', `ticket_analytics_report_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 };
 
 export default analyticsService;
-

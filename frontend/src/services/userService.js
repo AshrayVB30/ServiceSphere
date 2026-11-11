@@ -1,174 +1,107 @@
 import apiClient from './api';
-import { USER_ROLES } from '../constants';
+import { ENDPOINTS } from './endpoints';
 
-const STORAGE_KEY = 'servicesphere_mock_users';
-
-const INITIAL_USERS = [
-  {
-    id: 1,
-    username: 'alex_admin',
-    email: 'admin@servicesphere.io',
-    first_name: 'Alex',
-    last_name: 'Vance',
-    role: USER_ROLES.ADMIN,
-    phone_number: '+1 (555) 123-4567',
-    client: null,
-    is_active: true,
-    last_login: '2026-11-04T08:15:00.000Z',
-    date_joined: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 2,
-    username: 'sarah_agent',
-    email: 'agent@servicesphere.io',
-    first_name: 'Sarah',
-    last_name: 'Connor',
-    role: USER_ROLES.SUPPORT_AGENT,
-    phone_number: '+1 (555) 987-6543',
-    client: null,
-    is_active: true,
-    last_login: '2026-11-04T09:00:00.000Z',
-    date_joined: '2026-01-10T10:00:00.000Z',
-  },
-  {
-    id: 3,
-    username: 'john_client',
-    email: 'client@acmecorp.com',
-    first_name: 'John',
-    last_name: 'Doe',
-    role: USER_ROLES.CLIENT,
-    phone_number: '+1 (555) 456-7890',
-    client: { id: 1, name: 'Acme Global Corp' },
-    is_active: true,
-    last_login: '2026-11-03T16:20:00.000Z',
-    date_joined: '2026-01-15T12:00:00.000Z',
-  },
-  {
-    id: 4,
-    username: 'elena_approver',
-    email: 'approver@acmecorp.com',
-    first_name: 'Elena',
-    last_name: 'Rostova',
-    role: USER_ROLES.APPROVER,
-    phone_number: '+1 (555) 234-5678',
-    client: { id: 1, name: 'Acme Global Corp' },
-    is_active: true,
-    last_login: '2026-11-02T11:45:00.000Z',
-    date_joined: '2026-01-20T14:30:00.000Z',
-  },
-  {
-    id: 5,
-    username: 'tony_dev',
-    email: 'tony@starkindustries.com',
-    first_name: 'Tony',
-    last_name: 'Stark',
-    role: USER_ROLES.CLIENT,
-    phone_number: '+1 (555) 345-6789',
-    client: { id: 2, name: 'Stark Industries' },
-    is_active: true,
-    last_login: '2026-11-04T07:10:00.000Z',
-    date_joined: '2026-02-01T09:00:00.000Z',
-  },
-];
-
-function getStoredUsers() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // fallback
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_USERS));
-  return INITIAL_USERS;
-}
-
-function saveStoredUsers(users) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-  } catch {
-    // ignore
-  }
-}
-
+/**
+ * ServiceSphere User & Agent Directory Service
+ * Interfaces with backend user and agent endpoints.
+ * Note: Full user CRUD (/api/users/) is a documented pending backend requirement.
+ * Support agents are retrieved dynamically from /api/analytics/agents/workload/.
+ */
 export const userService = {
+  /**
+   * Retrieves active support agents available for ticket assignment.
+   * Fetches real agent records from the backend analytics workload service.
+   *
+   * @returns {Promise<Array<object>>} List of support agents.
+   */
+  async getAgents() {
+    try {
+      const response = await apiClient.get(ENDPOINTS.ANALYTICS.AGENTS_WORKLOAD);
+      const workload = response.data?.workload || [];
+      return workload.map((agent) => ({
+        id: agent.agent_id,
+        username: agent.username,
+        full_name: agent.full_name,
+        role: 'SUPPORT_AGENT',
+        pending_tickets: agent.pending_tickets,
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Retrieves user directory records.
+   * Currently maps to active staff accounts via agent workload endpoint.
+   *
+   * @param {object} [params] - Query filter parameters.
+   * @returns {Promise<Array<object>>} User list.
+   */
   async getUsers(params = {}) {
     try {
-      const response = await apiClient.get('/users/', { params });
-      return response.data.results || response.data;
-    } catch {
-      let list = [...getStoredUsers()];
+      const agents = await this.getAgents();
+      let list = agents.map((a) => ({
+        id: a.id,
+        username: a.username,
+        email: `${a.username}@servicesphere.io`,
+        first_name: a.full_name?.split(' ')[0] || a.username,
+        last_name: a.full_name?.split(' ').slice(1).join(' ') || '',
+        role: a.role,
+        is_active: true,
+        client: null,
+      }));
+
       if (params.search) {
-        const query = params.search.toLowerCase();
+        const q = params.search.toLowerCase();
         list = list.filter(
           (u) =>
-            u.username.toLowerCase().includes(query) ||
-            u.email.toLowerCase().includes(query) ||
-            u.first_name.toLowerCase().includes(query) ||
-            u.last_name.toLowerCase().includes(query) ||
-            u.client?.name?.toLowerCase().includes(query)
+            u.username.toLowerCase().includes(q) ||
+            u.first_name.toLowerCase().includes(q) ||
+            u.email.toLowerCase().includes(q)
         );
       }
-      if (params.role && params.role !== 'ALL') {
-        list = list.filter((u) => u.role === params.role);
-      }
-      if (params.status === 'active') {
-        list = list.filter((u) => u.is_active);
-      } else if (params.status === 'inactive') {
-        list = list.filter((u) => !u.is_active);
-      }
       return list;
-    }
-  },
-
-  async createUser(data) {
-    try {
-      const response = await apiClient.post('/users/', data);
-      return response.data;
     } catch {
-      const list = getStoredUsers();
-      const nextId = Math.max(...list.map((u) => u.id), 0) + 1;
-      const newUser = {
-        id: nextId,
-        username: data.username,
-        email: data.email,
-        first_name: data.first_name || '',
-        last_name: data.last_name || '',
-        role: data.role || USER_ROLES.CLIENT,
-        phone_number: data.phone_number || '',
-        client: data.client || null,
-        is_active: true,
-        last_login: null,
-        date_joined: new Date().toISOString(),
-      };
-      const updated = [newUser, ...list];
-      saveStoredUsers(updated);
-      return newUser;
+      return [];
     }
   },
 
-  async updateUser(id, data) {
-    try {
-      const response = await apiClient.patch(`/users/${id}/`, data);
-      return response.data;
-    } catch {
-      const list = getStoredUsers();
-      const index = list.findIndex((u) => String(u.id) === String(id));
-      if (index === -1) throw new Error('User not found');
-      list[index] = { ...list[index], ...data };
-      saveStoredUsers(list);
-      return list[index];
-    }
+  /**
+   * Creates a new user record.
+   * Note: Dedicated user CRUD is a pending backend feature; administrative onboarding is handled via Django Admin.
+   *
+   * @param {object} userData - User record details.
+   */
+  async createUser(userData) {
+    throw new Error(
+      `User creation for '${userData.username}' requires the pending /api/users/ administrative endpoint. Account provisioning is currently performed via Django Admin.`
+    );
   },
 
+  /**
+   * Updates an existing user record.
+   * Note: Dedicated user CRUD is a pending backend feature; administrative updates are handled via Django Admin.
+   *
+   * @param {number|string} id - User ID.
+   * @param {object} [_userData] - Partial user record updates.
+   */
+  async updateUser(id, _userData) {
+    throw new Error(
+      `User modification for ID #${id} requires the pending /api/users/ administrative endpoint. Profile changes are currently performed via Django Admin.`
+    );
+  },
+
+  /**
+   * Toggles active/suspended state of a user.
+   * Note: Dedicated user CRUD is a pending backend feature.
+   *
+   * @param {number|string} id - User ID.
+   */
   async toggleActive(id) {
-    const list = getStoredUsers();
-    const index = list.findIndex((u) => String(u.id) === String(id));
-    if (index === -1) throw new Error('User not found');
-    list[index].is_active = !list[index].is_active;
-    saveStoredUsers(list);
-    return list[index];
+    throw new Error(
+      `User status modification for ID #${id} requires the pending /api/users/ administrative endpoint. Account status is currently updated via Django Admin.`
+    );
   },
 };
 
 export default userService;
-

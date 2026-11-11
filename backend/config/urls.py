@@ -12,8 +12,12 @@ When a user visits a URL, Django searches through these patterns in order:
 
 from django.contrib import admin
 from django.urls import include, path
+from core.views import api_root
 
 urlpatterns = [
+    # Root API Gateway Overview
+    path("", api_root, name="api-root"),
+
     # Built-in administrative dashboard (requires is_staff=True)
     path("admin/", admin.site.urls),
 

@@ -1,48 +1,150 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, BookOpen, Clock, CheckCircle2, Ticket, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Plus, BookOpen, Clock, CheckCircle2, Ticket, ArrowRight, ShieldCheck, AlertCircle, RotateCw } from 'lucide-react';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Table } from '../../components/common/Table';
+import { Skeleton } from '../../components/common/Skeleton';
+import { EmptyState } from '../../components/common/EmptyState';
 import { StatusBadge } from '../../components/feedback/StatusBadge';
 import { PriorityBadge } from '../../components/feedback/PriorityBadge';
-import { TICKET_STATUSES, TICKET_PRIORITIES, ROUTES } from '../../constants';
+import { TICKET_STATUSES, ROUTES } from '../../constants';
 import { useAuth } from '../../hooks/useAuth';
+import { ticketService } from '../../services/ticketService';
 
-const clientTickets = [
-  {
-    id: 1,
-    ticket_number: 'TCK-8821',
-    subject: 'SSO Authentication latency during morning peak hours',
-    status: TICKET_STATUSES.IN_PROGRESS,
-    priority: TICKET_PRIORITIES.URGENT,
-    last_update: '15 mins ago by Sarah Connor',
-  },
-  {
-    id: 5,
-    ticket_number: 'TCK-8815',
-    subject: 'Role permissions synchronization failure on client portal',
-    status: TICKET_STATUSES.OPEN,
-    priority: TICKET_PRIORITIES.HIGH,
-    last_update: '1 hour ago',
-  },
-];
-
+/**
+ * Client Portal Dashboard Component
+ * Displays the client tenant's submitted support inquiries, active stages,
+ * clarification alerts, and resolution metrics retrieved from the Django API.
+ */
 export function ClientDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchClientTickets = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Backend automatically filters to client=request.user.client
+      const data = await ticketService.getTickets();
+      const ticketList = Array.isArray(data) ? data : data?.results || [];
+      setTickets(ticketList);
+    } catch (err) {
+      setError(err.message || 'Failed to retrieve your organization tickets.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchClientTickets();
+  }, [fetchClientTickets]);
+
+  // Derived real metrics
+  const activeTickets = tickets.filter((t) =>
+    [TICKET_STATUSES.OPEN, TICKET_STATUSES.IN_PROGRESS].includes(t.status)
+  ).length;
+
+  const awaitingClientCount = tickets.filter(
+    (t) => t.status === TICKET_STATUSES.AWAITING_CUSTOMER
+  ).length;
+
+  const resolvedTickets = tickets.filter((t) =>
+    [TICKET_STATUSES.RESOLVED, TICKET_STATUSES.CLOSED].includes(t.status)
+  ).length;
+
+  const organizationName = user?.client?.name || user?.client_name || 'Organization Portal';
+
+  const columns = [
+    {
+      key: 'ticket_number',
+      header: 'Ticket ID',
+      render: (val, row) => (
+        <Link
+          to={ROUTES.TICKET_DETAIL(row.id)}
+          className="font-mono text-xs font-semibold text-blue-600 hover:underline"
+        >
+          {val}
+        </Link>
+      ),
+    },
+    {
+      key: 'subject',
+      header: 'Issue Subject',
+      render: (val, row) => (
+        <Link
+          to={ROUTES.TICKET_DETAIL(row.id)}
+          className="font-medium text-slate-900 hover:text-blue-600 text-xs leading-normal block truncate max-w-md"
+        >
+          {val}
+        </Link>
+      ),
+    },
+    {
+      key: 'priority',
+      header: 'Urgency Tier',
+      render: (val) => <PriorityBadge priority={val} />,
+    },
+    {
+      key: 'status',
+      header: 'Status Stage',
+      render: (val) => <StatusBadge status={val} />,
+    },
+    {
+      key: 'updated_at',
+      header: 'Latest Activity',
+      align: 'right',
+      render: (val, row) => {
+        const timestamp = val || row.created_at;
+        const formatted = timestamp ? new Date(timestamp).toLocaleDateString() : 'Recent';
+        return <span className="text-xs text-slate-500 font-medium">{formatted}</span>;
+      },
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-28 w-full rounded-xl" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-3">
+        <div className="flex items-center space-x-2 font-semibold text-sm">
+          <AlertCircle className="h-4 w-4 text-rose-600" />
+          <span>Client Portal Data Unavailable</span>
+        </div>
+        <p className="text-xs text-rose-700">{error}</p>
+        <Button variant="secondary" size="sm" onClick={fetchClientTickets} leftIcon={RotateCw}>
+          Retry Connection
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Enterprise Service Desk Command Header (Replaces AI Gradient Hero) */}
+      {/* Enterprise Service Desk Command Header */}
       <div className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col md:flex-row md:items-center md:justify-between gap-5">
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/70">
               <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-              {user?.client?.name || 'Acme Global Corp'}
+              {organizationName}
             </span>
-            <span className="text-xs text-slate-500 font-mono">Enterprise 24/7 SLA</span>
+            <span className="text-xs text-slate-500 font-mono">Enterprise Service Desk</span>
           </div>
 
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
@@ -81,7 +183,7 @@ export function ClientDashboard() {
             <Ticket className="h-4 w-4 text-blue-600" />
           </div>
           <div className="mt-2.5 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">2</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-900">{activeTickets}</span>
             <span className="text-xs text-slate-500">tickets in progress</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
@@ -92,28 +194,30 @@ export function ClientDashboard() {
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-medium">Awaiting Client Clarification</span>
-            <Clock className="h-4 w-4 text-emerald-600" />
+            <Clock className="h-4 w-4 text-amber-600" />
           </div>
           <div className="mt-2.5 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-emerald-600">0</span>
+            <span className="text-2xl font-bold tracking-tight text-amber-600">{awaitingClientCount}</span>
             <span className="text-xs text-slate-500">actions pending</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
-            No questions or diagnostic logs needed from your team.
+            {awaitingClientCount > 0
+              ? 'Our specialists have requested information on your ticket.'
+              : 'No diagnostic logs or feedback required from your team.'}
           </p>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">Resolved This Month</span>
-            <CheckCircle2 className="h-4 w-4 text-slate-400" />
+            <span className="text-xs font-medium">Resolved Inquiries</span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           </div>
           <div className="mt-2.5 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">11</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-900">{resolvedTickets}</span>
             <span className="text-xs text-slate-500">cases completed</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
-            Mean resolution turnaround: <strong className="text-slate-800">2.8 hours</strong>.
+            Closed issues remain accessible for historical audit.
           </p>
         </div>
       </div>
@@ -132,55 +236,17 @@ export function ClientDashboard() {
           </Link>
         }
       >
-        <Table
-          columns={[
-            {
-              key: 'ticket_number',
-              header: 'Ticket ID',
-              render: (val, row) => (
-                <Link
-                  to={ROUTES.TICKET_DETAIL(row.id)}
-                  className="font-mono text-xs font-semibold text-blue-600 hover:underline"
-                >
-                  {val}
-                </Link>
-              ),
-            },
-            {
-              key: 'subject',
-              header: 'Issue Subject',
-              render: (val, row) => (
-                <Link
-                  to={ROUTES.TICKET_DETAIL(row.id)}
-                  className="font-medium text-slate-900 hover:text-blue-600 text-xs leading-normal block truncate max-w-md"
-                >
-                  {val}
-                </Link>
-              ),
-            },
-            {
-              key: 'priority',
-              header: 'Urgency Tier',
-              render: (val) => <PriorityBadge priority={val} />,
-            },
-            {
-              key: 'status',
-              header: 'Status Stage',
-              render: (val) => <StatusBadge status={val} />,
-            },
-            {
-              key: 'last_update',
-              header: 'Latest Activity',
-              align: 'right',
-              render: (val) => <span className="text-xs text-slate-500 font-medium">{val}</span>,
-            },
-          ]}
-          data={clientTickets}
-        />
+        {tickets.length === 0 ? (
+          <EmptyState
+            title="No Inquiries Filed"
+            description="You have not created any tickets yet. Click 'Create Ticket' above to reach our support team."
+          />
+        ) : (
+          <Table columns={columns} data={tickets} />
+        )}
       </Card>
     </div>
   );
 }
 
 export default ClientDashboard;
-

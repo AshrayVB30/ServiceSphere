@@ -1,157 +1,126 @@
 import apiClient from './api';
 import { ENDPOINTS } from './endpoints';
-import { USER_ROLES } from '../constants';
 
 /**
- * ServiceSphere Authentication Service
- * Communicates with Django session auth endpoints.
- * Includes a resilient mock fallback during frontend prototyping when backend is unreachable.
+ * ServiceSphere Authentication & Session Service
+ * Communicates with Django session-based authentication endpoints.
  */
-
-// Realistic demo profiles for testing all 4 roles
-export const MOCK_USERS = {
-  'admin@servicesphere.io': {
-    id: 1,
-    username: 'alex_admin',
-    email: 'admin@servicesphere.io',
-    first_name: 'Alex',
-    last_name: 'Vance',
-    role: USER_ROLES.ADMIN,
-    is_staff: true,
-    is_superuser: true,
-    client: null,
-  },
-  'agent@servicesphere.io': {
-    id: 2,
-    username: 'sarah_agent',
-    email: 'agent@servicesphere.io',
-    first_name: 'Sarah',
-    last_name: 'Connor',
-    role: USER_ROLES.SUPPORT_AGENT,
-    is_staff: true,
-    is_superuser: false,
-    client: null,
-  },
-  'client@acmecorp.com': {
-    id: 3,
-    username: 'john_client',
-    email: 'client@acmecorp.com',
-    first_name: 'John',
-    last_name: 'Doe',
-    role: USER_ROLES.CLIENT,
-    is_staff: false,
-    is_superuser: false,
-    client: {
-      id: 1,
-      name: 'Acme Global Corp',
-      tier: 'ENTERPRISE',
-    },
-  },
-  'approver@acmecorp.com': {
-    id: 4,
-    username: 'elena_approver',
-    email: 'approver@acmecorp.com',
-    first_name: 'Elena',
-    last_name: 'Rostova',
-    role: USER_ROLES.APPROVER,
-    is_staff: false,
-    is_superuser: false,
-    client: {
-      id: 1,
-      name: 'Acme Global Corp',
-    },
-  },
-};
-
-const MOCK_STORAGE_KEY = 'servicesphere_mock_user';
-
 export const authService = {
   /**
-   * Fetches the CSRF cookie from the Django backend
+   * Initializes the CSRF cookie on the browser client by pinging the backend CSRF endpoint.
+   * Must be called before initiating authentication requests.
+   *
+   * @returns {Promise<string>} CSRF token string.
    */
   async getCsrfToken() {
+    const response = await apiClient.get(ENDPOINTS.AUTH.CSRF);
+    return response.data.csrfToken;
+  },
+
+  /**
+   * Registers a new client or approver account on ServiceSphere.
+   * On 201 Created, Django binds a session and returns the user's profile metadata.
+   *
+   * @param {object} userData - Registration payload.
+   * @returns {Promise<object>} User profile object.
+   */
+  async register(userData) {
+    // Ensure CSRF cookie is initialized before submitting POST
+    await this.getCsrfToken().catch(() => {});
+
     try {
-      await apiClient.get(ENDPOINTS.AUTH.CSRF);
-    } catch {
-      // Ignore network errors in offline/mock mode
+      const response = await apiClient.post(ENDPOINTS.AUTH.REGISTER, userData);
+      return response.data.user || response.data;
+    } catch (error) {
+      throw new Error(error.formattedMessage || 'Registration failed. Please check form details.', {
+        cause: error,
+      });
     }
   },
 
   /**
-   * Authenticates user against Django /api/auth/login/
-   * Falls back to mock accounts if backend is offline and fallback is enabled.
+   * Authenticates user credentials against the Django backend.
+   * On 200 OK, Django establishes a session and returns the user's profile metadata.
+   *
+   * @param {object} credentials - User credentials.
+   * @param {string} [credentials.username] - User's username.
+   * @param {string} [credentials.email] - User's registered email address.
+   * @param {string} credentials.password - Account password.
+   * @returns {Promise<object>} User profile object.
    */
-  async login({ email, password, username }) {
-    const identifier = email || username;
+  async login({ email, username, password }) {
+    const identifier = username || email;
+
+    // Ensure CSRF cookie is initialized before submitting POST
+    await this.getCsrfToken().catch(() => {});
 
     try {
-      // 1. First ensure CSRF cookie is set
-      await this.getCsrfToken();
-
-      // 2. Attempt real backend call
       const response = await apiClient.post(ENDPOINTS.AUTH.LOGIN, {
         username: identifier,
         password,
       });
-
-      localStorage.removeItem(MOCK_STORAGE_KEY);
-      return { user: response.data.user || response.data, isMock: false };
+      return response.data.user || response.data;
     } catch (error) {
-      // If backend network error or 404, check mock credentials if fallback enabled
-      const isNetworkError = !error.response || error.code === 'ERR_NETWORK';
-      const fallbackAllowed = import.meta.env.VITE_ENABLE_MOCK_FALLBACK !== 'false';
-
-      if (isNetworkError && fallbackAllowed) {
-        const mockUser = MOCK_USERS[identifier?.toLowerCase()];
-        if (mockUser && password === 'Password123!') {
-          localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(mockUser));
-          return { user: mockUser, isMock: true };
-        }
-      }
-
-      // Re-throw formatted backend error
-      const message =
-        error.response?.data?.detail ||
-        error.response?.data?.message ||
-        error.response?.data?.non_field_errors?.[0] ||
-        (isNetworkError
-          ? 'Cannot connect to Django backend at ' + apiClient.defaults.baseURL + '. Verify backend server is running, or use demo credentials.'
-          : 'Invalid credentials. Please verify your email and password.');
-
-      throw new Error(message, { cause: error });
+      throw new Error(error.formattedMessage || 'Authentication failed. Please verify credentials.', {
+        cause: error,
+      });
     }
   },
 
   /**
-   * Verifies current session via /api/auth/me/
+   * Retrieves the current authenticated user's profile, role, and organization affiliation.
+   * Endpoint: GET /api/auth/me/
+   *
+   * @returns {Promise<object>} User profile object.
    */
   async getMe() {
-    // Check if we are in an active mock session
-    const storedMock = localStorage.getItem(MOCK_STORAGE_KEY);
-    if (storedMock) {
-      try {
-        return { user: JSON.parse(storedMock), isMock: true };
-      } catch {
-        localStorage.removeItem(MOCK_STORAGE_KEY);
-      }
+    try {
+      const response = await apiClient.get(ENDPOINTS.AUTH.ME);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.formattedMessage || 'Session expired or unauthenticated.', {
+        cause: error,
+      });
     }
-
-    const response = await apiClient.get(ENDPOINTS.AUTH.ME);
-    return { user: response.data, isMock: false };
   },
 
   /**
-   * Logs out user via /api/auth/logout/
+   * Terminates the active Django session and clears session cookies on the server.
+   * Endpoint: POST /api/auth/logout/
+   *
+   * @returns {Promise<void>}
    */
   async logout() {
-    localStorage.removeItem(MOCK_STORAGE_KEY);
     try {
       await apiClient.post(ENDPOINTS.AUTH.LOGOUT);
     } catch {
-      // Ignore errors on logout
+      // Invalidate frontend state regardless of network response
+    }
+  },
+
+  /**
+   * Updates the authenticated user's password with old-password verification
+   * and Django complexity rules.
+   * Endpoint: POST /api/auth/change-password/
+   *
+   * @param {object} payload - Passwords payload.
+   * @param {string} payload.old_password - Current password.
+   * @param {string} payload.new_password - New replacement password.
+   * @returns {Promise<object>} Success detail response.
+   */
+  async changePassword({ old_password, new_password }) {
+    try {
+      const response = await apiClient.post(ENDPOINTS.AUTH.CHANGE_PASSWORD, {
+        old_password,
+        new_password,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.formattedMessage || 'Failed to update password.', {
+        cause: error,
+      });
     }
   },
 };
 
 export default authService;
-

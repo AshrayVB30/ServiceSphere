@@ -11,6 +11,7 @@ import { Skeleton } from '../components/common/Skeleton';
 
 // Auth Pages (Eagerly loaded for fast first-paint)
 import { LoginPage } from '../features/auth/LoginPage';
+import { RegisterPage } from '../features/auth/RegisterPage';
 import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
 
 // Lazy Loaded Dashboards & Feature Pages (Code-split)
@@ -75,6 +76,7 @@ export function AppRoutes() {
       <Routes>
         {/* Public Authentication Routes */}
         <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+        <Route path={ROUTES.REGISTER} element={<RegisterPage />} />
         <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
 
         {/* Authenticated Workspace Shell */}

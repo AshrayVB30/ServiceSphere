@@ -234,6 +234,17 @@ export function UserListPage() {
         </Button>
       </div>
 
+      {/* Informative Operational Notice */}
+      <div className="rounded-xl border border-blue-200/80 bg-blue-50/60 p-3.5 flex items-start gap-3 text-xs text-blue-900">
+        <ShieldCheck className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+        <div className="space-y-0.5">
+          <span className="font-semibold text-blue-950">Live Operational Staff Directory:</span>
+          <p className="text-blue-800/90 leading-relaxed">
+            Support specialists are dynamically synchronized with backend workload analytics. Administrative onboarding and role grants are governed through Django Admin.
+          </p>
+        </div>
+      </div>
+
       {/* Directory Highlights Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="p-3.5 rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex items-center justify-between">

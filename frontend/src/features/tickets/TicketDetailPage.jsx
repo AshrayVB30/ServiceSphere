@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -9,6 +9,8 @@ import {
   History,
   MessageSquare,
   FileText,
+  AlertCircle,
+  RotateCw,
 } from 'lucide-react';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -20,7 +22,7 @@ import { PriorityBadge } from '../../components/feedback/PriorityBadge';
 import { Skeleton } from '../../components/common/Skeleton';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
-import ticketService from '../../services/ticketService';
+import { ticketService } from '../../services/ticketService';
 import { TICKET_STATUSES, ROUTES } from '../../constants';
 
 const STATUS_OPTIONS = [
@@ -31,6 +33,10 @@ const STATUS_OPTIONS = [
   { value: TICKET_STATUSES.CLOSED, label: 'Closed' },
 ];
 
+/**
+ * Ticket Detail & Resolution Workspace Component
+ * Loads full incident details, conversation feed, internal notes, and SLA status from the backend.
+ */
 export function TicketDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -38,7 +44,10 @@ export function TicketDetailPage() {
   const toast = useToast();
 
   const [ticket, setTicket] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [slaData, setSlaData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('comments'); // 'comments' | 'history'
 
   // New comment state
@@ -46,21 +55,28 @@ export function TicketDetailPage() {
   const [isInternal, setIsInternal] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
 
-  useEffect(() => {
-    async function fetchTicket() {
-      setLoading(true);
-      try {
-        const data = await ticketService.getTicket(id);
-        setTicket(data);
-      } catch (err) {
-        toast.error('Ticket not found', err.message);
-        navigate(ROUTES.TICKETS);
-      } finally {
-        setLoading(false);
-      }
+  const fetchTicketDetails = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [ticketRes, commentsRes, slaRes] = await Promise.all([
+        ticketService.getTicket(id),
+        ticketService.getComments(id).catch(() => []),
+        ticketService.getSLA(id).catch(() => null),
+      ]);
+      setTicket(ticketRes);
+      setComments(Array.isArray(commentsRes) ? commentsRes : commentsRes?.results || []);
+      setSlaData(slaRes);
+    } catch (err) {
+      setError(err.message || 'Ticket not found.');
+    } finally {
+      setLoading(false);
     }
-    fetchTicket();
-  }, [id, navigate, toast]);
+  }, [id]);
+
+  useEffect(() => {
+    fetchTicketDetails();
+  }, [fetchTicketDetails]);
 
   const handleStatusChange = async (e) => {
     const newStatus = e.target.value;
@@ -75,9 +91,9 @@ export function TicketDetailPage() {
 
   const handleAssignToMe = async () => {
     try {
-      const updated = await ticketService.assignTicket(ticket.id, user);
+      const updated = await ticketService.assignTicket(ticket.id, user.id);
       setTicket(updated);
-      toast.success('Ticket Assigned', `Ticket assigned to you.`);
+      toast.success('Ticket Assigned', 'Ticket assigned to you.');
     } catch (err) {
       toast.error('Failed to assign ticket', err.message);
     }
@@ -90,16 +106,11 @@ export function TicketDetailPage() {
     setSubmittingComment(true);
     try {
       const newComment = await ticketService.addComment(ticket.id, {
-        comment: commentText,
+        message: commentText,
         is_internal: isInternal,
-        author: user,
       });
 
-      setTicket((prev) => ({
-        ...prev,
-        comments: [...prev.comments, newComment],
-      }));
-
+      setComments((prev) => [...prev, newComment]);
       setCommentText('');
       setIsInternal(false);
       toast.success(
@@ -131,13 +142,43 @@ export function TicketDetailPage() {
     );
   }
 
-  if (!ticket) return null;
+  if (error || !ticket) {
+    return (
+      <div className="p-6 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-3">
+        <div className="flex items-center space-x-2 font-semibold text-sm">
+          <AlertCircle className="h-4 w-4 text-rose-600" />
+          <span>Ticket Not Found</span>
+        </div>
+        <p className="text-xs text-rose-700">{error || 'Requested ticket ID does not exist.'}</p>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={fetchTicketDetails} leftIcon={RotateCw}>
+            Retry
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate(ROUTES.TICKETS)}>
+            Back to Queue
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
-  // Filter comments: Client users do not see internal notes
-  const visibleComments = ticket.comments?.filter((c) => {
+  // Filter comments: Client users do not see internal staff notes
+  const visibleComments = comments.filter((c) => {
     if (!c.is_internal) return true;
     return isAdmin || isAgent;
-  }) || [];
+  });
+
+  const creatorName =
+    ticket.created_by_username ||
+    ticket.created_by?.first_name ||
+    ticket.created_by?.username ||
+    'Customer';
+  const clientName = ticket.client_name || ticket.client?.name || 'Client Organization';
+  const assigneeName =
+    ticket.assigned_to_username ||
+    (ticket.assigned_to?.first_name
+      ? `${ticket.assigned_to.first_name} ${ticket.assigned_to.last_name || ''}`
+      : ticket.assigned_to?.username);
 
   return (
     <div className="space-y-6">
@@ -145,7 +186,7 @@ export function TicketDetailPage() {
       <div>
         <Link
           to={ROUTES.TICKETS}
-          className="inline-flex items-center text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors"
+          className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5 mr-1" />
           Back to Ticket Queue
@@ -167,7 +208,7 @@ export function TicketDetailPage() {
               {ticket.subject}
             </h1>
             <p className="text-xs text-slate-500">
-              Filed by <strong className="text-slate-800 font-semibold">{ticket.created_by?.first_name} {ticket.created_by?.last_name || ticket.created_by?.username}</strong> ({ticket.client?.name}) on {new Date(ticket.created_at).toLocaleString()}
+              Filed by <strong className="text-slate-800 font-semibold">{creatorName}</strong> ({clientName}) on {new Date(ticket.created_at).toLocaleString()}
             </p>
           </div>
 
@@ -185,7 +226,7 @@ export function TicketDetailPage() {
         </div>
       </div>
 
-      {/* Main Grid: Details + Timeline (Left 2 cols) & Unified Metadata Inspector (Right 1 col) */}
+      {/* Main Grid: Details + Timeline (Left 2 cols) & Metadata Inspector (Right 1 col) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-5">
@@ -236,39 +277,48 @@ export function TicketDetailPage() {
                       No replies logged yet. Start the conversation below.
                     </p>
                   ) : (
-                    visibleComments.map((c) => (
-                      <div
-                        key={c.id}
-                        className={`rounded-xl p-3.5 border transition-colors ${
-                          c.is_internal
-                            ? 'bg-amber-50/70 border-amber-200/80 text-amber-950'
-                            : 'bg-slate-50/70 border-slate-200/80 text-slate-900'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center space-x-2">
-                            <div className="h-6 w-6 rounded-full bg-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center uppercase">
-                              {c.author?.first_name?.[0] || c.author?.username?.[0] || 'U'}
-                            </div>
-                            <span className="text-xs font-semibold text-slate-900">
-                              {c.author?.first_name ? `${c.author.first_name} ${c.author.last_name || ''}` : c.author?.username}
-                            </span>
-                            {c.is_internal && (
-                              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded">
-                                <Lock className="h-3 w-3" />
-                                Internal Staff Note
+                    visibleComments.map((c) => {
+                      const author = c.author_username || c.author?.username || 'Staff Specialist';
+                      const message = c.message || c.comment || '';
+                      return (
+                        <div
+                          key={c.id}
+                          className={`rounded-xl p-3.5 border transition-colors ${
+                            c.is_internal
+                              ? 'bg-amber-50/70 border-amber-200/80 text-amber-950'
+                              : 'bg-slate-50/70 border-slate-200/80 text-slate-900'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center space-x-2">
+                              <div className="h-6 w-6 rounded-full bg-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center uppercase">
+                                {author[0]}
+                              </div>
+                              <span className="text-xs font-semibold text-slate-900">
+                                {author}
                               </span>
-                            )}
+                              {c.author_role && (
+                                <span className="text-[10px] text-slate-500 uppercase font-mono px-1.5 py-0.2 bg-slate-200/60 rounded">
+                                  {c.author_role}
+                                </span>
+                              )}
+                              {c.is_internal && (
+                                <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded">
+                                  <Lock className="h-3 w-3" />
+                                  Internal Staff Note
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-slate-500">
+                              {new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </div>
-                          <span className="text-xs text-slate-500">
-                            {new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line pl-8">
+                            {message}
+                          </p>
                         </div>
-                        <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line pl-8">
-                          {c.comment}
-                        </p>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
 
@@ -309,22 +359,26 @@ export function TicketDetailPage() {
               /* Audit History Tab Content */
               <div className="p-5">
                 <div className="relative border-l-2 border-slate-200 ml-3 space-y-5">
-                  {ticket.history?.map((h) => (
-                    <div key={h.id} className="relative pl-6">
-                      <div className="absolute -left-1.5 top-1 h-3 w-3 rounded-full border-2 border-white bg-blue-600 shadow-2xs" />
-                      <p className="text-xs font-semibold text-slate-900">{h.details}</p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        By {h.performed_by} • {new Date(h.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                  ))}
+                  {(ticket.history || []).length === 0 ? (
+                    <p className="text-xs text-slate-400 py-3">No audit history entries recorded.</p>
+                  ) : (
+                    ticket.history.map((h) => (
+                      <div key={h.id} className="relative pl-6">
+                        <div className="absolute -left-1.5 top-1 h-3 w-3 rounded-full border-2 border-white bg-blue-600 shadow-2xs" />
+                        <p className="text-xs font-semibold text-slate-900">{h.details || h.action}</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          By {h.performed_by_username || h.performed_by} • {new Date(h.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Unified Metadata Inspector (Replaces 4 disjointed small cards) */}
+        {/* Right Unified Metadata Inspector */}
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] divide-y divide-slate-100">
           {/* Section: SLA Tracking */}
           <div className="p-4.5 space-y-3">
@@ -333,19 +387,29 @@ export function TicketDetailPage() {
             </span>
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-500 font-medium">Policy Tier:</span>
-              <span className="font-semibold text-slate-900">{ticket.sla?.policy_name || 'Standard SLA'}</span>
+              <span className="font-semibold text-slate-900">
+                {slaData?.policy_name || `${ticket.priority} SLA Policy`}
+              </span>
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-500 font-medium">Target Deadline:</span>
               <span className="font-mono text-slate-900 font-medium flex items-center gap-1">
                 <Clock className="h-3 w-3 text-blue-600" />
-                {new Date(ticket.sla?.resolution_deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {slaData?.resolution_deadline
+                  ? new Date(slaData.resolution_deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : 'Active'}
               </span>
             </div>
             <div className="pt-1 flex items-center justify-between">
               <span className="text-xs text-slate-500">Compliance State:</span>
-              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80">
-                Compliant
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded border ${
+                  slaData?.is_resolution_breached
+                    ? 'text-rose-700 bg-rose-50 border-rose-200/80'
+                    : 'text-emerald-700 bg-emerald-50 border border-emerald-200/80'
+                }`}
+              >
+                {slaData?.is_resolution_breached ? 'Breached' : 'Compliant'}
               </span>
             </div>
           </div>
@@ -355,17 +419,15 @@ export function TicketDetailPage() {
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
               Assigned Ownership
             </span>
-            {ticket.assigned_to ? (
+            {assigneeName ? (
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
                   <div className="h-7 w-7 rounded-full bg-blue-100 text-blue-700 font-semibold text-xs flex items-center justify-center uppercase">
-                    {ticket.assigned_to.first_name?.[0] || 'A'}
+                    {assigneeName[0]}
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-slate-900">
-                      {ticket.assigned_to.first_name} {ticket.assigned_to.last_name}
-                    </p>
-                    <p className="text-xs text-slate-500">Tier 1 Support Specialist</p>
+                    <p className="text-xs font-semibold text-slate-900">{assigneeName}</p>
+                    <p className="text-xs text-slate-500">Assigned Support Specialist</p>
                   </div>
                 </div>
               </div>
@@ -393,8 +455,8 @@ export function TicketDetailPage() {
                 <Building2 className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-900">{ticket.client?.name}</p>
-                <p className="text-xs text-slate-500">Enterprise Tenant Account</p>
+                <p className="text-xs font-semibold text-slate-900">{clientName}</p>
+                <p className="text-xs text-slate-500">Tenant Account</p>
               </div>
             </div>
           </div>
@@ -402,7 +464,7 @@ export function TicketDetailPage() {
           {/* Section: Linked Knowledge Base Articles */}
           <div className="p-4.5 space-y-2.5">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-              Recommended Knowledge Article
+              Recommended Knowledge
             </span>
             <Link
               to={ROUTES.KNOWLEDGE_BASE}
@@ -410,9 +472,9 @@ export function TicketDetailPage() {
             >
               <p className="text-xs font-medium text-blue-600 hover:underline flex items-center gap-1.5">
                 <FileText className="h-3.5 w-3.5 shrink-0" />
-                SAML SSO Latency & Cluster Troubleshooting
+                Runbooks & Documentation
               </p>
-              <p className="text-xs text-slate-500 mt-1">Verified diagnostic documentation</p>
+              <p className="text-xs text-slate-500 mt-1">Verified diagnostic procedures</p>
             </Link>
           </div>
         </div>
@@ -422,4 +484,3 @@ export function TicketDetailPage() {
 }
 
 export default TicketDetailPage;
-

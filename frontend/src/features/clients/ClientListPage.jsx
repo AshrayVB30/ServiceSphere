@@ -318,7 +318,7 @@ export function ClientListPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Company Name"
-            placeholder="Acme Global Corp"
+            placeholder="Company or Organization Name"
             required
             value={formName}
             onChange={(e) => setFormName(e.target.value)}
@@ -326,7 +326,7 @@ export function ClientListPage() {
 
           <Input
             label="Corporate Email Domain"
-            placeholder="acmeglobal.com"
+            placeholder="company.com"
             required
             helperText="Users with this email domain will be linked automatically."
             value={formDomain}
@@ -337,7 +337,7 @@ export function ClientListPage() {
             <Input
               label="Support Contact Email"
               type="email"
-              placeholder="support@acmeglobal.com"
+              placeholder="contact@company.com"
               required
               value={formEmail}
               onChange={(e) => setFormEmail(e.target.value)}

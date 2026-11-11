@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { Button } from '../../components/common/Button';
@@ -11,7 +11,7 @@ import { USER_ROLES, ROUTES } from '../../constants';
 
 /**
  * Enterprise Login Screen (Apple / Linear Aesthetic)
- * Balanced whitespace, typography, quick demo role credentials selector.
+ * Minimalist, high contrast, clean enterprise authentication.
  */
 export function LoginPage() {
   const { login } = useAuth();
@@ -25,7 +25,6 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors },
   } = useForm({
     defaultValues: {
@@ -77,13 +76,6 @@ export function LoginPage() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  // Helper to instantly load one of the four canonical demo credentials
-  const fillCredentials = (email, password) => {
-    setValue('email', email, { shouldValidate: true });
-    setValue('password', password, { shouldValidate: true });
-    setAuthError('');
   };
 
   return (
@@ -167,64 +159,19 @@ export function LoginPage() {
                 Sign In
               </Button>
             </div>
+
+            <div className="text-center pt-2">
+              <p className="text-xs text-slate-500">
+                Don't have an account?{' '}
+                <Link
+                  to={ROUTES.REGISTER}
+                  className="font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                >
+                  Create an account
+                </Link>
+              </p>
+            </div>
           </form>
-
-          {/* Quick Demo Credentials Panel for testing all 4 roles */}
-          <div className="mt-7 pt-5 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                Quick Role Switcher (Demo)
-              </span>
-              <span className="text-xs text-slate-400">Click to fill</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-left">
-              <button
-                type="button"
-                onClick={() => fillCredentials('admin@servicesphere.io', 'Password123!')}
-                className="p-2.5 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all text-left cursor-pointer group"
-              >
-                <p className="text-xs font-semibold text-slate-900 group-hover:text-blue-600">
-                  Administrator
-                </p>
-                <p className="text-xs text-slate-400 truncate mt-0.5 font-mono">admin@servicesphere.io</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillCredentials('agent@servicesphere.io', 'Password123!')}
-                className="p-2.5 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all text-left cursor-pointer group"
-              >
-                <p className="text-xs font-semibold text-slate-900 group-hover:text-blue-600">
-                  Support Agent
-                </p>
-                <p className="text-xs text-slate-400 truncate mt-0.5 font-mono">agent@servicesphere.io</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillCredentials('client@acmecorp.com', 'Password123!')}
-                className="p-2.5 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all text-left cursor-pointer group"
-              >
-                <p className="text-xs font-semibold text-slate-900 group-hover:text-blue-600">
-                  Client User
-                </p>
-                <p className="text-xs text-slate-400 truncate mt-0.5 font-mono">client@acmecorp.com</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillCredentials('approver@acmecorp.com', 'Password123!')}
-                className="p-2.5 rounded-lg border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all text-left cursor-pointer group"
-              >
-                <p className="text-xs font-semibold text-slate-900 group-hover:text-blue-600">
-                  Approver / Manager
-                </p>
-                <p className="text-xs text-slate-400 truncate mt-0.5 font-mono">approver@acmecorp.com</p>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Footer info */}

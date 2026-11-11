@@ -9,6 +9,7 @@ Handles validation and data shaping for:
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from .models import User
@@ -119,4 +120,126 @@ class PasswordChangeSerializer(serializers.Serializer):
         if attrs["old_password"] == attrs["new_password"]:
             raise serializers.ValidationError({"new_password": "New password cannot be identical to the current password."})
         return attrs
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    """
+    Validates and registers new user accounts in ServiceSphere.
+    Supports organization linkage and enforces password complexity policies.
+    """
+    password = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={"input_type": "password"},
+        help_text="Account password conforming to security policies.",
+    )
+    password_confirm = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={"input_type": "password"},
+        help_text="Re-type password for confirmation.",
+    )
+    client_name = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="Optional company name for multi-tenant organization association.",
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "phone_number",
+            "role",
+            "client",
+            "client_name",
+            "password",
+            "password_confirm",
+        ]
+        extra_kwargs = {
+            "first_name": {"required": True, "allow_blank": False},
+            "email": {"required": True, "allow_blank": False},
+            "role": {"required": False},
+            "client": {"required": False, "allow_null": True},
+        }
+
+    def validate_email(self, value):
+        val = value.strip().lower()
+        if User.objects.filter(email__iexact=val).exists():
+            raise serializers.ValidationError("An account with this email address already exists.")
+        return val
+
+    def validate_username(self, value):
+        val = value.strip()
+        if User.objects.filter(username__iexact=val).exists():
+            raise serializers.ValidationError("This username is already taken. Please choose another.")
+        return val
+
+    def validate_role(self, value):
+        # Public self-registration permits CLIENT or APPROVER roles.
+        # Staff roles (ADMIN, SUPPORT_AGENT) require administrative provisioning.
+        allowed_public_roles = [User.Role.CLIENT, User.Role.APPROVER]
+        if value and value not in allowed_public_roles:
+            raise serializers.ValidationError(
+                "Self-registration is restricted to Client or Approver accounts. "
+                "Staff roles must be provisioned by a system administrator."
+            )
+        return value or User.Role.CLIENT
+
+    def validate(self, attrs):
+        if attrs.get("password") != attrs.get("password_confirm"):
+            raise serializers.ValidationError({"password_confirm": "Passwords do not match."})
+
+        # Validate password using Django's password validators with DRF-compliant error formatting
+        try:
+            validate_password(attrs["password"])
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"password": list(exc.messages)})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop("password_confirm", None)
+        client_name = validated_data.pop("client_name", "").strip()
+        client = validated_data.get("client")
+        password = validated_data.pop("password")
+        role = validated_data.get("role") or User.Role.CLIENT
+
+        # If client was not explicitly selected by ID, link or create client organization
+        if not client:
+            from clients.models import Client
+            from django.utils.text import slugify
+
+            if not client_name:
+                display_name = validated_data.get("first_name") or validated_data.get("username", "Member")
+                client_name = f"{display_name}'s Workspace"
+
+            existing = Client.objects.filter(name__iexact=client_name).first()
+            if existing:
+                client = existing
+            else:
+                base_code = slugify(client_name) or "org"
+                code = base_code
+                count = 1
+                while Client.objects.filter(code=code).exists():
+                    code = f"{base_code}-{count}"
+                    count += 1
+
+                client = Client.objects.create(
+                    name=client_name,
+                    code=code,
+                    contact_email=validated_data.get("email", ""),
+                    is_active=True,
+                )
+            validated_data["client"] = client
+
+        validated_data["role"] = role
+        user = User.objects.create_user(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
 

@@ -50,6 +50,7 @@ export const SLA_TRACKING_STATUSES = {
 export const ROUTES = {
   // Public / Auth
   LOGIN: '/login',
+  REGISTER: '/register',
   FORGOT_PASSWORD: '/forgot-password',
   RESET_PASSWORD: '/reset-password',
 

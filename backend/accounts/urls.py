@@ -10,10 +10,14 @@ from .views import (
     LoginAPIView,
     LogoutAPIView,
     PasswordChangeAPIView,
+    RegisterAPIView,
     UserProfileView,
 )
 
 urlpatterns = [
+    # REST Registration: Creates account and establishes session
+    path("register/", RegisterAPIView.as_view(), name="auth-register"),
+
     # REST Login: Authenticates and establishes session
     path("login/", LoginAPIView.as_view(), name="auth-login"),
 

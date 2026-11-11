@@ -1,150 +1,129 @@
 import apiClient from './api';
 import { ENDPOINTS } from './endpoints';
-import { TICKET_PRIORITIES } from '../constants';
 
-const STORAGE_KEY_POLICIES = 'servicesphere_mock_sla_policies';
-
-const INITIAL_POLICIES = [
-  {
-    id: 1,
-    name: 'Mission Critical Outage Policy',
-    priority: TICKET_PRIORITIES.URGENT,
-    response_time_hours: '1.00',
-    resolution_time_hours: '4.00',
-    is_active: true,
-    description: 'Zero-tolerance policy for production outages and severe client downtime.',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 2,
-    name: 'High Impact Service Policy',
-    priority: TICKET_PRIORITIES.HIGH,
-    response_time_hours: '2.00',
-    resolution_time_hours: '8.00',
-    is_active: true,
-    description: 'Applies to degraded system performance and core feature impairments.',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 3,
-    name: 'Standard Operational SLA',
-    priority: TICKET_PRIORITIES.MEDIUM,
-    response_time_hours: '4.00',
-    resolution_time_hours: '24.00',
-    is_active: true,
-    description: 'Standard support requests, configuration inquiries, and minor issues.',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 4,
-    name: 'Low Urgency SLA',
-    priority: TICKET_PRIORITIES.LOW,
-    response_time_hours: '8.00',
-    resolution_time_hours: '48.00',
-    is_active: true,
-    description: 'General informational requests and cosmetic enhancements.',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-];
-
-const INITIAL_ESCALATIONS = [
-  {
-    id: 1,
-    ticket_id: 1,
-    ticket_number: 'TCK-8821',
-    subject: 'SSO Authentication latency during morning peak hours',
-    client_name: 'Acme Global Corp',
-    priority: TICKET_PRIORITIES.URGENT,
-    tier: 1,
-    reason: 'First response target 75% elapsed without public agent response',
-    escalated_to: 'Sarah Connor & On-call Lead',
-    status: 'TRIGGERED',
-    created_at: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-  },
-  {
-    id: 2,
-    ticket_id: 3,
-    ticket_number: 'TCK-8819',
-    subject: 'Database read replica synchronization delay',
-    client_name: 'Wayne Enterprises',
-    priority: TICKET_PRIORITIES.HIGH,
-    tier: 2,
-    reason: 'Resolution target threshold warning',
-    escalated_to: 'DevOps Tier 2 Escalation',
-    status: 'ACKNOWLEDGED',
-    created_at: new Date(Date.now() - 3600000 * 10).toISOString(),
-  },
-];
-
-function getStoredPolicies() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_POLICIES);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // fallback
-  }
-  localStorage.setItem(STORAGE_KEY_POLICIES, JSON.stringify(INITIAL_POLICIES));
-  return INITIAL_POLICIES;
-}
-
-function saveStoredPolicies(policies) {
-  try {
-    localStorage.setItem(STORAGE_KEY_POLICIES, JSON.stringify(policies));
-  } catch {
-    // ignore
-  }
-}
-
+/**
+ * ServiceSphere Service Level Agreement (SLA) Service
+ * Communicates with Django REST APIs under /api/sla/
+ */
 export const slaService = {
+  /**
+   * Retrieves all defined SLA policies.
+   * Endpoint: GET /api/sla/policies/
+   *
+   * @returns {Promise<Array<object>>} List of SLA policies.
+   */
   async getPolicies() {
-    try {
-      const response = await apiClient.get(ENDPOINTS.SLA.POLICIES);
-      return response.data.results || response.data;
-    } catch {
-      return getStoredPolicies();
-    }
+    const response = await apiClient.get(ENDPOINTS.SLA.POLICIES);
+    return response.data?.results || response.data || [];
   },
 
+  /**
+   * Retrieves an individual SLA policy by primary key.
+   *
+   * @param {number|string} id - Policy ID.
+   * @returns {Promise<object>} Policy details.
+   */
+  async getPolicy(id) {
+    const response = await apiClient.get(ENDPOINTS.SLA.POLICY_DETAIL(id));
+    return response.data;
+  },
+
+  /**
+   * Activates an SLA policy for its assigned priority level.
+   * Endpoint: POST /api/sla/policies/{id}/activate/
+   *
+   * @param {number|string} id - Policy ID.
+   * @returns {Promise<object>} Updated policy record.
+   */
+  async activatePolicy(id) {
+    const response = await apiClient.post(ENDPOINTS.SLA.POLICY_ACTIVATE(id));
+    return response.data;
+  },
+
+  /**
+   * Updates SLA policy thresholds and parameters.
+   * Endpoint: PATCH /api/sla/policies/{id}/
+   *
+   * @param {number|string} id - Policy ID.
+   * @param {object} data - Partial policy updates (response_time_hours, resolution_time_hours, description).
+   * @returns {Promise<object>} Updated policy record.
+   */
   async updatePolicy(id, data) {
-    try {
-      const response = await apiClient.patch(ENDPOINTS.SLA.POLICY_DETAIL(id), data);
-      return response.data;
-    } catch {
-      const list = getStoredPolicies();
-      const index = list.findIndex((p) => String(p.id) === String(id));
-      if (index === -1) throw new Error('Policy not found');
-      list[index] = { ...list[index], ...data };
-      saveStoredPolicies(list);
-      return list[index];
-    }
+    const response = await apiClient.patch(ENDPOINTS.SLA.POLICY_DETAIL(id), data);
+    return response.data;
   },
 
-  async createPolicy(data) {
-    try {
-      const response = await apiClient.post(ENDPOINTS.SLA.POLICIES, data);
-      return response.data;
-    } catch {
-      const list = getStoredPolicies();
-      const nextId = Math.max(...list.map((p) => p.id), 0) + 1;
-      const newPolicy = {
-        id: nextId,
-        ...data,
-        is_active: true,
-        created_at: new Date().toISOString(),
-      };
-      const updated = [...list, newPolicy];
-      saveStoredPolicies(updated);
-      return newPolicy;
-    }
+  /**
+   * Deactivates an SLA policy.
+   * Endpoint: POST /api/sla/policies/{id}/deactivate/
+   *
+   * @param {number|string} id - Policy ID.
+   * @returns {Promise<object>} Updated policy record.
+   */
+  async deactivatePolicy(id) {
+    const response = await apiClient.post(ENDPOINTS.SLA.POLICY_DEACTIVATE(id));
+    return response.data;
   },
 
+  /**
+   * Retrieves SLA deadline monitoring metrics for a specific ticket.
+   * Endpoint: GET /api/sla/tickets/{ticketId}/
+   *
+   * @param {number|string} ticketId - Ticket ID.
+   * @returns {Promise<object>} Ticket SLA tracking details.
+   */
+  async getTicketSLA(ticketId) {
+    const response = await apiClient.get(ENDPOINTS.SLA.TICKET_TRACKING(ticketId));
+    return response.data;
+  },
+
+  /**
+   * Retrieves aggregate SLA health metrics across all active tickets.
+   * Endpoint: GET /api/sla/monitoring/
+   *
+   * @returns {Promise<object>} Aggregated SLA dashboard summary.
+   */
+  async getMonitoringSummary() {
+    const response = await apiClient.get(ENDPOINTS.SLA.MONITORING);
+    return response.data;
+  },
+
+  /**
+   * Lists all active tickets that have breached either their first-response or resolution SLA.
+   * Endpoint: GET /api/sla/overdue-tickets/
+   *
+   * @param {object} [params] - Optional filters (priority, client_id, assigned_to).
+   * @returns {Promise<Array<object>>} Overdue ticket records.
+   */
+  async getOverdueTickets(params = {}) {
+    const response = await apiClient.get(ENDPOINTS.SLA.OVERDUE_TICKETS, { params });
+    return response.data?.results || response.data || [];
+  },
+
+  /**
+   * Retrieves chronological log of active and historical SLA escalation events.
+   * Endpoint: GET /api/sla/escalations/
+   *
+   * @returns {Promise<Array<object>>} List of escalation incidents.
+   */
   async getEscalations() {
-    try {
-      const response = await apiClient.get(ENDPOINTS.SLA.ESCALATIONS);
-      return response.data.results || response.data;
-    } catch {
-      return INITIAL_ESCALATIONS;
-    }
+    const response = await apiClient.get(ENDPOINTS.SLA.ESCALATIONS);
+    return response.data?.results || response.data || [];
+  },
+
+  /**
+   * Acknowledges an SLA escalation incident with optional operational notes.
+   * Endpoint: POST /api/sla/escalations/{id}/acknowledge/
+   *
+   * @param {number|string} id - Escalation incident ID.
+   * @param {string} [note] - Operational acknowledgement comment.
+   * @returns {Promise<object>} Updated escalation incident.
+   */
+  async acknowledgeEscalation(id, note = '') {
+    const response = await apiClient.post(ENDPOINTS.SLA.ESCALATION_ACKNOWLEDGE(id), {
+      note,
+    });
+    return response.data;
   },
 };
 

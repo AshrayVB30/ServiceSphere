@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   TrendingUp,
-  ArrowUpRight,
   Users,
   ShieldCheck,
   Activity,
   ArrowRight,
+  RotateCw,
+  AlertCircle,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -23,72 +24,112 @@ import {
 import { Card } from '../../components/common/Card';
 import { Table } from '../../components/common/Table';
 import { Button } from '../../components/common/Button';
+import { Skeleton } from '../../components/common/Skeleton';
+import { EmptyState } from '../../components/common/EmptyState';
 import { StatusBadge } from '../../components/feedback/StatusBadge';
 import { PriorityBadge } from '../../components/feedback/PriorityBadge';
-import { TICKET_STATUSES, TICKET_PRIORITIES, ROUTES } from '../../constants';
+import { analyticsService } from '../../services/analyticsService';
+import { ticketService } from '../../services/ticketService';
+import { ROUTES } from '../../constants';
 
-// Realistic sample trend data
-const ticketTrendsData = [
-  { day: 'Mon', created: 24, resolved: 18 },
-  { day: 'Tue', created: 35, resolved: 28 },
-  { day: 'Wed', created: 42, resolved: 39 },
-  { day: 'Thu', created: 38, resolved: 36 },
-  { day: 'Fri', created: 48, resolved: 44 },
-  { day: 'Sat', created: 18, resolved: 20 },
-  { day: 'Sun', created: 12, resolved: 15 },
-];
+// Priority bar colors
+const PRIORITY_COLORS = {
+  LOW: '#64748B',
+  MEDIUM: '#2563EB',
+  HIGH: '#D97706',
+  URGENT: '#DC2626',
+};
 
-const priorityDistribution = [
-  { name: 'Low', count: 18, fill: '#64748B' },
-  { name: 'Medium', count: 42, fill: '#2563EB' },
-  { name: 'High', count: 24, fill: '#D97706' },
-  { name: 'Urgent', count: 8, fill: '#DC2626' },
-];
+/**
+ * Format ISO date string into short readable date / weekday.
+ * @param {string} dateStr - Date string (YYYY-MM-DD or ISO).
+ * @returns {string} Short formatted date.
+ */
+function formatTrendDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+}
 
-const recentTickets = [
-  {
-    id: 1,
-    ticket_number: 'TCK-8821',
-    subject: 'SSO Authentication latency during morning peak hours',
-    client_name: 'Acme Global Corp',
-    priority: TICKET_PRIORITIES.URGENT,
-    status: TICKET_STATUSES.IN_PROGRESS,
-    assigned_to: 'Sarah Connor',
-    created_at: '10 mins ago',
-  },
-  {
-    id: 2,
-    ticket_number: 'TCK-8820',
-    subject: 'Request for secondary API webhook endpoint provisioning',
-    client_name: 'Stark Industries',
-    priority: TICKET_PRIORITIES.MEDIUM,
-    status: TICKET_STATUSES.OPEN,
-    assigned_to: 'Unassigned',
-    created_at: '25 mins ago',
-  },
-  {
-    id: 3,
-    ticket_number: 'TCK-8819',
-    subject: 'Database read replica synchronization delay',
-    client_name: 'Wayne Enterprises',
-    priority: TICKET_PRIORITIES.HIGH,
-    status: TICKET_STATUSES.AWAITING_CUSTOMER,
-    assigned_to: 'Alex Vance',
-    created_at: '1 hour ago',
-  },
-  {
-    id: 4,
-    ticket_number: 'TCK-8818',
-    subject: 'Invoice PDF generation formatting glitch in billing portal',
-    client_name: 'Cyberdyne Systems',
-    priority: TICKET_PRIORITIES.LOW,
-    status: TICKET_STATUSES.RESOLVED,
-    assigned_to: 'Sarah Connor',
-    created_at: '3 hours ago',
-  },
-];
+/**
+ * Format created_at timestamp into relative or short readable date.
+ * @param {string} dateStr - ISO timestamp.
+ * @returns {string} Readable timestamp.
+ */
+function formatTimeAgo(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const now = new Date();
+  const diffSec = Math.floor((now - d) / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDays = Math.floor(diffHr / 24);
+  return `${diffDays}d ago`;
+}
 
+/**
+ * System Administrator Dashboard Component
+ * Displays real-time operational KPI metrics, intake/resolution trends,
+ * priority distribution, and recent tickets stream from the Django backend.
+ */
 export function AdminDashboard() {
+  const [summary, setSummary] = useState(null);
+  const [trends, setTrends] = useState([]);
+  const [priorityData, setPriorityData] = useState([]);
+  const [recentTickets, setRecentTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const loadDashboardData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [summaryRes, trendsRes, priorityRes, ticketsRes] = await Promise.all([
+        analyticsService.getDashboardSummary(),
+        analyticsService.getTicketTrends(),
+        analyticsService.getTicketsByPriority(),
+        ticketService.getTickets({ limit: 5 }),
+      ]);
+
+      setSummary(summaryRes);
+
+      // Format timeline data for AreaChart
+      const rawTimeline = trendsRes?.timeline || trendsRes || [];
+      const formattedTimeline = rawTimeline.map((item) => ({
+        day: formatTrendDate(item.date),
+        created: item.created || 0,
+        resolved: item.resolved || 0,
+      }));
+      setTrends(formattedTimeline);
+
+      // Format priority data for BarChart
+      const rawPriority = Array.isArray(priorityRes) ? priorityRes : priorityRes?.by_priority || [];
+      const formattedPriority = rawPriority.map((p) => ({
+        name: p.priority_display || p.priority,
+        count: p.count || 0,
+        fill: PRIORITY_COLORS[p.priority] || '#2563EB',
+      }));
+      setPriorityData(formattedPriority);
+
+      // Slice recent tickets
+      const ticketList = Array.isArray(ticketsRes) ? ticketsRes : ticketsRes?.results || [];
+      setRecentTickets(ticketList.slice(0, 5));
+    } catch (err) {
+      setError(err.message || 'Failed to load operational analytics.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
   const columns = [
     {
       key: 'ticket_number',
@@ -113,7 +154,7 @@ export function AdminDashboard() {
           >
             {val}
           </Link>
-          <p className="text-xs text-slate-500 mt-0.5">{row.client_name}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{row.client_name || row.client?.name || 'General Inquiry'}</p>
         </div>
       ),
     },
@@ -128,24 +169,72 @@ export function AdminDashboard() {
       render: (val) => <StatusBadge status={val} />,
     },
     {
-      key: 'assigned_to',
+      key: 'assigned_to_username',
       header: 'Assigned Specialist',
-      render: (val) => (
-        <div className="flex items-center space-x-2">
-          <div className="h-5 w-5 rounded-full bg-slate-100 text-slate-600 font-semibold text-[10px] flex items-center justify-center uppercase">
-            {val[0]}
+      render: (val, row) => {
+        const name = val || row.assigned_to?.username || 'Unassigned';
+        const initial = name !== 'Unassigned' ? name[0] : '?';
+        return (
+          <div className="flex items-center space-x-2">
+            <div className="h-5 w-5 rounded-full bg-slate-100 text-slate-600 font-semibold text-[10px] flex items-center justify-center uppercase">
+              {initial}
+            </div>
+            <span className="text-xs text-slate-700 font-medium">{name}</span>
           </div>
-          <span className="text-xs text-slate-700 font-medium">{val}</span>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'created_at',
       header: 'Logged',
       align: 'right',
-      render: (val) => <span className="text-xs text-slate-500">{val}</span>,
+      render: (val) => <span className="text-xs text-slate-500">{formatTimeAgo(val)}</span>,
     },
   ];
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center pb-2 border-b border-slate-200/80">
+          <Skeleton className="h-8 w-64 rounded-lg" />
+          <Skeleton className="h-8 w-48 rounded-lg" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <Skeleton className="lg:col-span-2 h-72 rounded-xl" />
+          <Skeleton className="h-72 rounded-xl" />
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-3">
+        <div className="flex items-center space-x-2 font-semibold text-sm">
+          <AlertCircle className="h-4 w-4 text-rose-600" />
+          <span>Operational Dashboard Data Unavailable</span>
+        </div>
+        <p className="text-xs text-rose-700">{error}</p>
+        <Button variant="secondary" size="sm" onClick={loadDashboardData} leftIcon={RotateCw}>
+          Retry Connection
+        </Button>
+      </div>
+    );
+  }
+
+  const activeTickets = summary?.tickets?.active_tickets ?? 0;
+  const resolvedTickets = summary?.tickets?.completed_tickets ?? 0;
+  const compliancePct = summary?.sla?.compliance_percentage ?? 100;
+  const overdueCount = summary?.sla?.overdue_tickets_count ?? 0;
+  const activeAgents = summary?.workload?.active_agents_count ?? 0;
+  const unassignedCount = summary?.tickets?.status_breakdown?.open ?? 0;
+  const avgResolutionHours = summary?.sla?.avg_resolution_time_hours ?? 0;
 
   return (
     <div className="space-y-6">
@@ -158,7 +247,7 @@ export function AdminDashboard() {
             </h1>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/80">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              All Systems Operational
+              Connected to ServiceSphere API
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
@@ -176,7 +265,7 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      {/* Integrated Operations Performance Strip (Replaces Generic AI 4-Card Grid) */}
+      {/* Integrated Operations Performance Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between text-slate-500">
@@ -184,30 +273,31 @@ export function AdminDashboard() {
             <Activity className="h-4 w-4 text-slate-400" />
           </div>
           <div className="mt-2.5 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">92</span>
-            <span className="inline-flex items-center text-xs font-medium text-emerald-600">
-              <ArrowUpRight className="h-3.5 w-3.5 mr-0.5" />
-              +12% vs lw
+            <span className="text-2xl font-bold tracking-tight text-slate-900">{activeTickets}</span>
+            <span className="inline-flex items-center text-xs font-medium text-slate-500">
+              {summary?.tickets?.total_tickets || 0} total logged
             </span>
           </div>
           <div className="mt-2 text-xs text-slate-500 flex items-center justify-between border-t border-slate-100 pt-2">
-            <span>Unassigned: <strong className="text-slate-800 font-semibold">14</strong></span>
-            <span className="text-amber-600 font-medium">3 urgent</span>
+            <span>Open Backlog: <strong className="text-slate-800 font-semibold">{unassignedCount}</strong></span>
+            <span className="text-slate-600 font-medium">{summary?.tickets?.status_breakdown?.in_progress || 0} in progress</span>
           </div>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">Clearance Velocity</span>
+            <span className="text-xs font-medium">Resolved Throughput</span>
             <TrendingUp className="h-4 w-4 text-slate-400" />
           </div>
           <div className="mt-2.5 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">38</span>
-            <span className="text-xs text-slate-500 font-medium">resolved today</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-900">{resolvedTickets}</span>
+            <span className="text-xs text-emerald-600 font-medium">
+              {summary?.tickets?.completion_rate || 0}% clearance
+            </span>
           </div>
           <div className="mt-2 text-xs text-slate-500 flex items-center justify-between border-t border-slate-100 pt-2">
             <span>Mean MTTR:</span>
-            <span className="font-semibold text-slate-800">3.2 hours</span>
+            <span className="font-semibold text-slate-800">{avgResolutionHours ? `${avgResolutionHours} hrs` : 'Nominal'}</span>
           </div>
         </div>
 
@@ -217,27 +307,29 @@ export function AdminDashboard() {
             <ShieldCheck className="h-4 w-4 text-emerald-600" />
           </div>
           <div className="mt-2.5 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-emerald-600">97.4%</span>
+            <span className={`text-2xl font-bold tracking-tight ${compliancePct >= 95 ? 'text-emerald-600' : 'text-amber-600'}`}>
+              {compliancePct}%
+            </span>
             <span className="text-xs text-slate-500">target: 95.0%</span>
           </div>
           <div className="mt-2 text-xs text-slate-500 flex items-center justify-between border-t border-slate-100 pt-2">
-            <span>Active Breaches:</span>
-            <span className="font-semibold text-slate-900">0</span>
+            <span>Overdue Breaches:</span>
+            <span className={`font-semibold ${overdueCount > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{overdueCount}</span>
           </div>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">Agent Staffing & Load</span>
+            <span className="text-xs font-medium">Active Support Staff</span>
             <Users className="h-4 w-4 text-slate-400" />
           </div>
           <div className="mt-2.5 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">8</span>
-            <span className="text-xs text-slate-500">specialists on-duty</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-900">{activeAgents}</span>
+            <span className="text-xs text-slate-500">specialists deployed</span>
           </div>
           <div className="mt-2 text-xs text-slate-500 flex items-center justify-between border-t border-slate-100 pt-2">
-            <span>Team Utilization:</span>
-            <span className="font-semibold text-slate-800">82% (Nominal)</span>
+            <span>Assigned Load:</span>
+            <span className="font-semibold text-slate-800">{summary?.workload?.total_active_workload || 0} active tickets</span>
           </div>
         </div>
       </div>
@@ -247,70 +339,74 @@ export function AdminDashboard() {
         {/* Ticket Volume Trends */}
         <Card
           title="Ticket Intake vs. Resolution Velocity"
-          subtitle="7-day operational throughput comparison"
+          subtitle="Operational throughput comparison from backend analytics"
           className="lg:col-span-2"
         >
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={ticketTrendsData} margin={{ top: 10, right: 15, left: 5, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="createdGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="resolvedGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#16A34A" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#16A34A" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                <XAxis dataKey="day" stroke="#94A3B8" fontSize={11} tickLine={false} />
-                <YAxis
-                  stroke="#94A3B8"
-                  fontSize={11}
-                  tickLine={false}
-                  label={{
-                    value: 'Tickets',
-                    angle: -90,
-                    position: 'insideLeft',
-                    style: { textAnchor: 'middle', fill: '#64748B', fontSize: '11px', fontWeight: 500 },
-                  }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                    fontSize: '12px',
-                  }}
-                />
-                <Legend
-                  align="right"
-                  verticalAlign="top"
-                  iconType="circle"
-                  wrapperStyle={{ paddingBottom: '12px', fontSize: '12px', color: '#475569' }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="created"
-                  name="Incoming Intake"
-                  stroke="#2563EB"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#createdGrad)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="resolved"
-                  name="Resolved Clearance"
-                  stroke="#16A34A"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#resolvedGrad)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {trends.length === 0 ? (
+              <EmptyState title="No timeline data" description="Ticket activity will be visualized as incidents are recorded." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trends} margin={{ top: 10, right: 15, left: 5, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="createdGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="resolvedGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#16A34A" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#16A34A" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="day" stroke="#94A3B8" fontSize={11} tickLine={false} />
+                  <YAxis
+                    stroke="#94A3B8"
+                    fontSize={11}
+                    tickLine={false}
+                    label={{
+                      value: 'Tickets',
+                      angle: -90,
+                      position: 'insideLeft',
+                      style: { textAnchor: 'middle', fill: '#64748B', fontSize: '11px', fontWeight: 500 },
+                    }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                      fontSize: '12px',
+                    }}
+                  />
+                  <Legend
+                    align="right"
+                    verticalAlign="top"
+                    iconType="circle"
+                    wrapperStyle={{ paddingBottom: '12px', fontSize: '12px', color: '#475569' }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="created"
+                    name="Incoming Intake"
+                    stroke="#2563EB"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#createdGrad)"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="resolved"
+                    name="Resolved Clearance"
+                    stroke="#16A34A"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#resolvedGrad)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </Card>
 
@@ -320,22 +416,26 @@ export function AdminDashboard() {
           subtitle="Triage urgency distribution across queue"
         >
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={priorityDistribution} layout="vertical" margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-                <XAxis type="number" stroke="#94A3B8" fontSize={11} tickLine={false} />
-                <YAxis type="category" dataKey="name" stroke="#64748B" fontSize={11} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                    fontSize: '12px',
-                  }}
-                />
-                <Bar dataKey="count" name="Tickets" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {priorityData.length === 0 ? (
+              <EmptyState title="No priority data" description="Priority distribution will update as tickets are categorized." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={priorityData} layout="vertical" margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                  <XAxis type="number" stroke="#94A3B8" fontSize={11} tickLine={false} />
+                  <YAxis type="category" dataKey="name" stroke="#64748B" fontSize={11} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      fontSize: '12px',
+                    }}
+                  />
+                  <Bar dataKey="count" name="Tickets" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </Card>
       </div>
@@ -361,4 +461,3 @@ export function AdminDashboard() {
 }
 
 export default AdminDashboard;
-

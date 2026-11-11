@@ -48,11 +48,18 @@ export function TicketCreateModal({ isOpen, onClose, onCreated }) {
   const onSubmit = async (data) => {
     setSubmitting(true);
     try {
-      const created = await ticketService.createTicket({
-        ...data,
-        client: user?.client || { id: 1, name: 'Acme Global Corp' },
-        created_by: user,
-      });
+      const payload = {
+        subject: data.subject.trim(),
+        description: data.description.trim(),
+        category: data.category,
+        priority: data.priority,
+      };
+
+      if (user?.client) {
+        payload.client = user.client.id || user.client;
+      }
+
+      const created = await ticketService.createTicket(payload);
 
       toast.success(
         'Ticket Created Successfully',

@@ -95,3 +95,40 @@ def liveness_check(request):
         },
         status=200,
     )
+
+
+@require_GET
+def api_root(request):
+    """
+    Root Entrypoint: GET /
+
+    Provides a clean status overview and links to API endpoints, Django Admin,
+    and the React frontend client.
+    """
+    return JsonResponse(
+        {
+            "service": "ServiceSphere API Gateway",
+            "version": "1.0.0",
+            "status": "online",
+            "frontend_url": "http://localhost:5173",
+            "admin_url": "/admin/",
+            "endpoints": {
+                "health": "/api/health/",
+                "liveness": "/api/health/liveness/",
+                "auth": {
+                    "csrf": "/api/auth/csrf/",
+                    "login": "/api/auth/login/",
+                    "register": "/api/auth/register/",
+                    "me": "/api/auth/me/",
+                    "change_password": "/api/auth/change-password/",
+                },
+                "tickets": "/api/tickets/",
+                "clients": "/api/clients/",
+                "sla": "/api/sla/policies/",
+                "approvals": "/api/approvals/",
+                "knowledge": "/api/knowledge/articles/",
+                "analytics": "/api/analytics/dashboard/",
+            },
+        },
+        status=200,
+    )

@@ -1,37 +1,65 @@
-import React, { useState } from 'react';
-import { Check, X, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Check, X, HelpCircle, AlertCircle, RotateCw } from 'lucide-react';
 import { Card } from '../../components/common/Card';
 import { Table } from '../../components/common/Table';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
 import { Textarea } from '../../components/common/Textarea';
+import { Skeleton } from '../../components/common/Skeleton';
+import { EmptyState } from '../../components/common/EmptyState';
 import { StatusBadge } from '../../components/feedback/StatusBadge';
+import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
+import { approvalService } from '../../services/approvalService';
+import { APPROVAL_STATUSES } from '../../constants';
 
-const sampleApprovals = [
-  {
-    id: 1,
-    ticket_id: 'TCK-8812',
-    requested_by: 'Sarah Connor (Support Agent)',
-    reason: 'Hardware server tier upgrade request for database clustering in production environment.',
-    status: 'PENDING',
-    created_at: '2 hours ago',
-  },
-  {
-    id: 2,
-    ticket_id: 'TCK-8809',
-    requested_by: 'Alex Vance (Administrator)',
-    reason: 'Service level agreement penalty credit adjustment authorization for billing cycle.',
-    status: 'INFO_REQUESTED',
-    created_at: '1 day ago',
-  },
-];
-
+/**
+ * Executive Approver Dashboard Component
+ * Displays authorization queues for policy exceptions, hardware upgrades,
+ * and contractual SLA credits retrieved from the Django Approvals REST API.
+ */
 export function ApproverDashboard() {
+  const { user } = useAuth();
   const toast = useToast();
+  const [approvals, setApprovals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Decision Modal State
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [actionType, setActionType] = useState('');
+  const [actionType, setActionType] = useState(''); // 'Approve' | 'Reject' | 'Request Info'
   const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchApprovals = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await approvalService.getApprovals();
+      const list = Array.isArray(data) ? data : data?.results || [];
+      setApprovals(list);
+    } catch (err) {
+      setError(err.message || 'Failed to retrieve pending approvals.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchApprovals();
+  }, [fetchApprovals]);
+
+  // Derived real metrics
+  const pendingApprovals = approvals.filter(
+    (a) => a.status === APPROVAL_STATUSES.PENDING
+  );
+  const pendingCount = pendingApprovals.length;
+  const approvedCount = approvals.filter(
+    (a) => a.status === APPROVAL_STATUSES.APPROVED
+  ).length;
+  const infoRequestedCount = approvals.filter(
+    (a) => a.status === APPROVAL_STATUSES.INFO_REQUESTED
+  ).length;
 
   const handleDecision = (req, action) => {
     setSelectedRequest(req);
@@ -39,13 +67,78 @@ export function ApproverDashboard() {
     setComment('');
   };
 
-  const submitDecision = () => {
-    toast.success(
-      'Approval Action Recorded',
-      `Request #${selectedRequest.id} has been marked as ${actionType.toUpperCase()}.`
-    );
-    setSelectedRequest(null);
+  const submitDecision = async () => {
+    if (!selectedRequest) return;
+    setSubmitting(true);
+    try {
+      let updated;
+      if (actionType === 'Approve') {
+        updated = await approvalService.approve(selectedRequest.id, comment, user);
+        toast.success(
+          'Approval Action Recorded',
+          `Request #${selectedRequest.id} has been marked as APPROVED.`
+        );
+      } else if (actionType === 'Reject') {
+        updated = await approvalService.reject(selectedRequest.id, comment, user);
+        toast.error(
+          'Request Rejected',
+          `Request #${selectedRequest.id} has been marked as REJECTED.`
+        );
+      } else if (actionType === 'Request Info') {
+        if (!comment.trim()) {
+          toast.warning('Note Required', 'Please explain what clarification is needed.');
+          setSubmitting(false);
+          return;
+        }
+        updated = await approvalService.requestInfo(selectedRequest.id, comment, user);
+        toast.info(
+          'Information Requested',
+          `Requester notified to provide clarification on Request #${selectedRequest.id}.`
+        );
+      }
+
+      setApprovals((prev) =>
+        prev.map((a) => (a.id === updated.id ? updated : a))
+      );
+      setSelectedRequest(null);
+    } catch (err) {
+      toast.error('Action Failed', err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center pb-2 border-b border-slate-200/80">
+          <Skeleton className="h-8 w-64 rounded-lg" />
+          <Skeleton className="h-8 w-40 rounded-lg" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-72 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-3">
+        <div className="flex items-center space-x-2 font-semibold text-sm">
+          <AlertCircle className="h-4 w-4 text-rose-600" />
+          <span>Approver Portal Unavailable</span>
+        </div>
+        <p className="text-xs text-rose-700">{error}</p>
+        <Button variant="secondary" size="sm" onClick={fetchApprovals} leftIcon={RotateCw}>
+          Retry Connection
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -61,7 +154,7 @@ export function ApproverDashboard() {
 
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-          2 Decisions Pending Review
+          {pendingCount} Decisions Pending Review
         </span>
       </div>
 
@@ -70,33 +163,33 @@ export function ApproverDashboard() {
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <span className="text-xs font-medium text-slate-500">Awaiting Decision</span>
           <div className="mt-2 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-amber-600">2</span>
+            <span className="text-2xl font-bold tracking-tight text-amber-600">{pendingCount}</span>
             <span className="text-xs text-slate-500">urgent requests</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
-            Average decision turnaround: <strong className="text-slate-800">45 minutes</strong>.
+            Pending executive authorization.
           </p>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-          <span className="text-xs font-medium text-slate-500">Authorized This Month</span>
+          <span className="text-xs font-medium text-slate-500">Authorized Records</span>
           <div className="mt-2 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-emerald-600">14</span>
+            <span className="text-2xl font-bold tracking-tight text-emerald-600">{approvedCount}</span>
             <span className="text-xs text-slate-500">operations approved</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
-            Compliance adherence rate: <strong className="text-slate-800">100%</strong>.
+            Audit history preserved in compliance archive.
           </p>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <span className="text-xs font-medium text-slate-500">Clarification Requested</span>
           <div className="mt-2 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-blue-600">1</span>
+            <span className="text-2xl font-bold tracking-tight text-blue-600">{infoRequestedCount}</span>
             <span className="text-xs text-slate-500">pending response</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
-            Additional diagnostic context requested from agent.
+            Awaiting additional diagnostic context from agent.
           </p>
         </div>
       </div>
@@ -106,68 +199,79 @@ export function ApproverDashboard() {
         subtitle="Policy exceptions and resource requests requiring executive sign-off"
         padding={false}
       >
-        <Table
-          columns={[
-            {
-              key: 'ticket_id',
-              header: 'Ticket ID',
-              render: (val) => (
-                <span className="font-mono text-xs font-semibold text-blue-600">
-                  {val}
-                </span>
-              ),
-            },
-            {
-              key: 'requested_by',
-              header: 'Submitted By',
-              render: (val) => <span className="text-xs font-medium text-slate-900">{val}</span>,
-            },
-            {
-              key: 'reason',
-              header: 'Business Rationale',
-              render: (val) => <span className="text-xs text-slate-600 line-clamp-1 max-w-sm">{val}</span>,
-            },
-            {
-              key: 'status',
-              header: 'Status',
-              render: (val) => <StatusBadge status={val} />,
-            },
-            {
-              key: 'actions',
-              header: 'Executive Decision',
-              align: 'right',
-              render: (_, row) => (
-                <div className="flex items-center justify-end space-x-1.5">
-                  <Button
-                    variant="subtle"
-                    size="sm"
-                    leftIcon={Check}
-                    onClick={() => handleDecision(row, 'Approve')}
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    variant="dangerOutline"
-                    size="sm"
-                    leftIcon={X}
-                    onClick={() => handleDecision(row, 'Reject')}
-                  >
-                    Reject
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    leftIcon={HelpCircle}
-                    onClick={() => handleDecision(row, 'Request Info')}
-                  >
-                    Inquire
-                  </Button>
-                </div>
-              ),
-            },
-          ]}
-          data={sampleApprovals}
-        />
+        {pendingApprovals.length === 0 ? (
+          <EmptyState
+            title="Authorization Queue Clear"
+            description="No pending approval requests require your review at this time."
+          />
+        ) : (
+          <Table
+            columns={[
+              {
+                key: 'ticket_number',
+                header: 'Ticket ID',
+                render: (val, row) => (
+                  <span className="font-mono text-xs font-semibold text-blue-600">
+                    {val || `TCK-${row.ticket || row.ticket_id}`}
+                  </span>
+                ),
+              },
+              {
+                key: 'requested_by_username',
+                header: 'Submitted By',
+                render: (val, row) => (
+                  <span className="text-xs font-medium text-slate-900">
+                    {val || row.requested_by?.username || 'Staff Agent'}
+                  </span>
+                ),
+              },
+              {
+                key: 'reason',
+                header: 'Business Rationale',
+                render: (val) => <span className="text-xs text-slate-600 line-clamp-1 max-w-sm">{val}</span>,
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (val) => <StatusBadge status={val} />,
+              },
+              {
+                key: 'actions',
+                header: 'Executive Decision',
+                align: 'right',
+                render: (_, row) => (
+                  <div className="flex items-center justify-end space-x-1.5">
+                    <Button
+                      variant="subtle"
+                      size="sm"
+                      leftIcon={Check}
+                      onClick={() => handleDecision(row, 'Approve')}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      variant="dangerOutline"
+                      size="sm"
+                      leftIcon={X}
+                      onClick={() => handleDecision(row, 'Reject')}
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={HelpCircle}
+                      onClick={() => handleDecision(row, 'Request Info')}
+                    >
+                      Inquire
+                    </Button>
+                  </div>
+                ),
+              },
+            ]}
+            data={pendingApprovals}
+          />
+        )}
       </Card>
 
       {/* Decision Comment Modal */}
@@ -175,12 +279,13 @@ export function ApproverDashboard() {
         isOpen={!!selectedRequest}
         onClose={() => setSelectedRequest(null)}
         title={`${actionType} Request #${selectedRequest?.id}`}
-        description={`Ticket: ${selectedRequest?.ticket_id} • Requested by: ${selectedRequest?.requested_by}`}
+        description={`Ticket: ${selectedRequest?.ticket_number || selectedRequest?.ticket} • Submitted by: ${selectedRequest?.requested_by_username || 'Staff'}`}
         footer={
           <>
             <Button
               variant="secondary"
               size="sm"
+              disabled={submitting}
               onClick={() => setSelectedRequest(null)}
             >
               Cancel
@@ -188,6 +293,7 @@ export function ApproverDashboard() {
             <Button
               variant={actionType === 'Reject' ? 'danger' : 'primary'}
               size="sm"
+              loading={submitting}
               onClick={submitDecision}
             >
               Confirm {actionType}
@@ -214,4 +320,3 @@ export function ApproverDashboard() {
 }
 
 export default ApproverDashboard;
-

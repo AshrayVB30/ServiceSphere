@@ -22,6 +22,7 @@ from rest_framework.views import APIView
 from .serializers import (
     LoginSerializer,
     PasswordChangeSerializer,
+    RegisterSerializer,
     UserDetailSerializer,
 )
 
@@ -153,4 +154,37 @@ class PasswordChangeAPIView(APIView):
         return Response(
             {"detail": "Password updated successfully."},
             status=status.HTTP_200_OK,
+        )
+
+
+class RegisterAPIView(APIView):
+    """
+    POST /api/auth/register/
+
+    Registers a new client or approver account, establishes a secure session cookie,
+    and returns authenticated user identity metadata.
+    """
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth"
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        # Establish Django session and bind session ID cookie
+        login(request, user)
+
+        client_ip = request.META.get("REMOTE_ADDR", "unknown")
+        logger.info(
+            f"New user registration: '{user.username}' (Role: {user.role}, Org: {user.client}) from IP {client_ip}"
+        )
+
+        return Response(
+            {
+                "detail": "Account registered successfully.",
+                "user": UserDetailSerializer(user).data,
+            },
+            status=status.HTTP_201_CREATED,
         )

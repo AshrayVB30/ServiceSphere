@@ -18,7 +18,14 @@ Therefore, a centralized Help Desk System is required to manage client onboardin
 ![ServiceSphere system architecture](documentation/ServiceSphere-System%20Architecture.drawio.png)
 
 ## Folder Structure
-
+```text
+ServiceSphere
+|
+|- backend
+|
+|
+|- frontend 
+```
 
 
 ## Environment Setup

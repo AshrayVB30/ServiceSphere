@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Shield, Save, Sliders } from 'lucide-react';
+import { Settings, Shield, Save, Sliders, KeyRound } from 'lucide-react';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
@@ -7,6 +7,7 @@ import { Select } from '../../components/common/Select';
 import { Checkbox } from '../../components/common/Checkbox';
 import { Badge } from '../../components/common/Badge';
 import { useToast } from '../../hooks/useToast';
+import { authService } from '../../services/authService';
 
 export function SettingsPage() {
   const toast = useToast();
@@ -23,9 +24,38 @@ export function SettingsPage() {
   const [enforcePasswordPolicy, setEnforcePasswordPolicy] = useState(true);
   const [restrictDomainSignups, setRestrictDomainSignups] = useState(true);
 
+  // Password Change
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+
   const handleSave = (e) => {
     e.preventDefault();
     toast.success('Configuration Saved', 'System settings updated successfully.');
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error('Validation Error', 'New passwords do not match.');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await authService.changePassword({
+        old_password: oldPassword,
+        new_password: newPassword,
+      });
+      toast.success('Password Updated', 'Your account credentials have been securely updated.');
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      toast.error('Password Update Failed', err.message);
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   return (
@@ -119,7 +149,8 @@ export function SettingsPage() {
       )}
 
       {activeTab === 'security' && (
-        <form onSubmit={handleSave} className="space-y-6">
+        <div className="space-y-6">
+          <form onSubmit={handleSave} className="space-y-6">
           <Card title="Session & Authentication Controls">
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 bg-gray-50/70">
@@ -169,6 +200,54 @@ export function SettingsPage() {
             </Button>
           </div>
         </form>
+
+        {/* Real Django Password Change Endpoint Integration */}
+        <form onSubmit={handleChangePassword} className="space-y-4 pt-4 border-t border-slate-200">
+          <Card
+            title="Account Password Management"
+            subtitle="Securely change your account password through the Django authentication service"
+          >
+            <div className="space-y-4 max-w-md">
+              <Input
+                label="Current Password"
+                type="password"
+                placeholder="Enter your current password..."
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+                required
+              />
+              <Input
+                label="New Password"
+                type="password"
+                placeholder="Minimum 8 characters..."
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+              <Input
+                label="Confirm New Password"
+                type="password"
+                placeholder="Re-type new password..."
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+
+              <div className="pt-2">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  loading={changingPassword}
+                  leftIcon={KeyRound}
+                >
+                  Update Password
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </form>
+      </div>
       )}
 
       {activeTab === 'taxonomy' && (

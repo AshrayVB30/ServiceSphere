@@ -15,6 +15,7 @@ export function SLADashboardPage() {
   const toast = useToast();
   const [policies, setPolicies] = useState([]);
   const [escalations, setEscalations] = useState([]);
+  const [monitoring, setMonitoring] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Edit Policy Modal
@@ -28,12 +29,14 @@ export function SLADashboardPage() {
     async function loadData() {
       setLoading(true);
       try {
-        const [polList, escList] = await Promise.all([
+        const [polList, escList, monSummary] = await Promise.all([
           slaService.getPolicies(),
           slaService.getEscalations(),
+          slaService.getMonitoringSummary().catch(() => null),
         ]);
         setPolicies(polList);
         setEscalations(escList);
+        setMonitoring(monSummary);
       } finally {
         setLoading(false);
       }
@@ -200,64 +203,76 @@ export function SLADashboardPage() {
         </div>
       </div>
 
-      {/* SLA Health Strip (Replaces Generic AI 4-Card Grid) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">Compliance Rate</span>
-            <TrendingUp className="h-4 w-4 text-emerald-600" />
-          </div>
-          <div className="mt-2 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-emerald-600">97.4%</span>
-            <span className="text-xs text-slate-500">goal: &gt;95.0%</span>
-          </div>
-          <p className="mt-2 text-xs text-emerald-600 font-medium border-t border-slate-100 pt-2">
-            +2.4% above contractual requirement
-          </p>
-        </div>
+      {/* Dynamic SLA Health Metrics Strip */}
+      {(() => {
+        const totalActive = monitoring?.total_active_tickets ?? 0;
+        const withinSla = monitoring?.tickets_within_sla ?? 0;
+        const warnings = (monitoring?.tickets_approaching_response ?? 0) + (monitoring?.tickets_approaching_resolution ?? 0);
+        const breaches = (monitoring?.tickets_breached_response ?? 0) + (monitoring?.tickets_breached_resolution ?? 0);
+        const compliancePct = totalActive > 0 ? Math.round((withinSla / totalActive) * 1000) / 10 : 100.0;
 
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">Active Governed Tickets</span>
-            <Clock className="h-4 w-4 text-slate-400" />
-          </div>
-          <div className="mt-2 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">92</span>
-            <span className="text-xs text-slate-500">tickets monitored</span>
-          </div>
-          <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
-            100% assigned with live breach timers
-          </p>
-        </div>
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+              <div className="flex items-center justify-between text-slate-500">
+                <span className="text-xs font-medium">Compliance Rate</span>
+                <TrendingUp className="h-4 w-4 text-emerald-600" />
+              </div>
+              <div className="mt-2 flex items-baseline space-x-2">
+                <span className={`text-2xl font-bold tracking-tight ${compliancePct >= 95 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {compliancePct}%
+                </span>
+                <span className="text-xs text-slate-500">goal: &gt;95.0%</span>
+              </div>
+              <p className="mt-2 text-xs text-slate-500 font-medium border-t border-slate-100 pt-2">
+                {totalActive === 0 ? 'No active tickets in queue' : `${compliancePct >= 95 ? '+' : ''}${(compliancePct - 95).toFixed(1)}% vs. target threshold`}
+              </p>
+            </div>
 
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">Tier 1 Warnings</span>
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-          </div>
-          <div className="mt-2 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-amber-600">2</span>
-            <span className="text-xs text-slate-500">near threshold</span>
-          </div>
-          <p className="mt-2 text-xs text-amber-600 font-medium border-t border-slate-100 pt-2">
-            First response target nearing expiration
-          </p>
-        </div>
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+              <div className="flex items-center justify-between text-slate-500">
+                <span className="text-xs font-medium">Active Governed Tickets</span>
+                <Clock className="h-4 w-4 text-slate-400" />
+              </div>
+              <div className="mt-2 flex items-baseline space-x-2">
+                <span className="text-2xl font-bold tracking-tight text-slate-900">{totalActive}</span>
+                <span className="text-xs text-slate-500">tickets monitored</span>
+              </div>
+              <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
+                {totalActive === 0 ? 'Zero active incidents requiring SLA tracking' : `${withinSla} within response & resolution targets`}
+              </p>
+            </div>
 
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">Active Breaches</span>
-            <ShieldAlert className="h-4 w-4 text-slate-400" />
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+              <div className="flex items-center justify-between text-slate-500">
+                <span className="text-xs font-medium">Near Threshold Warnings</span>
+                <AlertTriangle className={`h-4 w-4 ${warnings > 0 ? 'text-amber-500' : 'text-slate-400'}`} />
+              </div>
+              <div className="mt-2 flex items-baseline space-x-2">
+                <span className={`text-2xl font-bold tracking-tight ${warnings > 0 ? 'text-amber-600' : 'text-slate-900'}`}>{warnings}</span>
+                <span className="text-xs text-slate-500">near threshold</span>
+              </div>
+              <p className="mt-2 text-xs text-slate-500 font-medium border-t border-slate-100 pt-2">
+                {warnings === 0 ? 'No tickets approaching breach' : `${warnings} ticket(s) nearing target deadline`}
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+              <div className="flex items-center justify-between text-slate-500">
+                <span className="text-xs font-medium">Active Breaches</span>
+                <ShieldAlert className={`h-4 w-4 ${breaches > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
+              </div>
+              <div className="mt-2 flex items-baseline space-x-2">
+                <span className={`text-2xl font-bold tracking-tight ${breaches > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{breaches}</span>
+                <span className="text-xs text-slate-500">{breaches === 0 ? 'zero failures' : 'breached'}</span>
+              </div>
+              <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
+                {breaches === 0 ? 'Clean record in current monitoring cycle' : `${breaches} ticket(s) exceeded target SLA`}
+              </p>
+            </div>
           </div>
-          <div className="mt-2 flex items-baseline space-x-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">0</span>
-            <span className="text-xs text-slate-500">zero failures</span>
-          </div>
-          <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
-            Clean record in current 30-day billing cycle
-          </p>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* SLA Policy Matrix */}
       <Card
