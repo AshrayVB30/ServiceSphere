@@ -22,6 +22,9 @@ python-dotenv==1.2.4
 celery==5.6.3
 redis==8.1.0
 
+# WSGI HTTP Server for Production
+gunicorn==23.0.0
+
 # Asynchronous & Database Utilities
 asgiref==3.13.0
 sqlparse==0.6.0
