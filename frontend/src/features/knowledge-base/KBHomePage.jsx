@@ -67,14 +67,19 @@ export function KBHomePage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      // Backend ArticleCreateUpdateSerializer expects 'category' (FK field name), not 'category_id'
+      // Backend ArticleCreateUpdateSerializer creates DRAFT; immediately publish so it is live
       const created = await knowledgeService.createArticle({
         title: formTitle,
         category: parseInt(formCategory, 10),
         summary: formSummary,
         content: formContent,
       });
-      setArticles((prev) => [created, ...prev]);
+      try {
+        const published = await knowledgeService.publishArticle(created.id);
+        setArticles((prev) => [published, ...prev]);
+      } catch {
+        setArticles((prev) => [created, ...prev]);
+      }
       toast.success('Article Published', `${formTitle} is now accessible in the repository.`);
       setIsCreateOpen(false);
       setFormTitle('');

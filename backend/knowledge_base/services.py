@@ -177,7 +177,7 @@ def create_article_revision(article, revised_by):
 # ARTICLE MANAGEMENT SERVICES
 # ==============================================================================
 
-def create_article(author, category, title, summary, content, visibility=Article.Visibility.PUBLIC, status=Article.Status.PUBLISHED):
+def create_article(author, category, title, summary, content, visibility=Article.Visibility.PUBLIC, status=Article.Status.DRAFT):
     """
     Creates a new knowledge base article.
 
@@ -185,7 +185,7 @@ def create_article(author, category, title, summary, content, visibility=Article
     - Author must be an authenticated staff user.
     - Category must exist and be active.
     - Title, summary, and content must not be blank.
-    - Status defaults to PUBLISHED so newly published articles are immediately live.
+    - Status defaults to DRAFT.
     """
     title_clean = title.strip()
     summary_clean = summary.strip()
