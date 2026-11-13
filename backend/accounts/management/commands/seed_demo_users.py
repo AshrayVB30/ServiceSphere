@@ -109,11 +109,22 @@ class Command(BaseCommand):
             email = udata["email"]
             username = udata["username"]
 
-            # Match either by exact email or exact username to handle existing accounts
-            user = User.objects.filter(models.Q(email__iexact=email) | models.Q(username__iexact=username)).first()
-            created = False
+            # Ensure we resolve any existing user by username or email cleanly
+            user_by_uname = User.objects.filter(username__iexact=username).first()
+            user_by_email = User.objects.filter(email__iexact=email).first()
 
-            if not user:
+            if user_by_uname and user_by_email and user_by_uname.id != user_by_email.id:
+                # Resolve conflict between two distinct records
+                user_by_uname.delete()
+                user = user_by_email
+                created = False
+            elif user_by_uname:
+                user = user_by_uname
+                created = False
+            elif user_by_email:
+                user = user_by_email
+                created = False
+            else:
                 user = User(username=username, email=email)
                 created = True
 

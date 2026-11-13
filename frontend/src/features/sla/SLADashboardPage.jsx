@@ -30,8 +30,8 @@ export function SLADashboardPage() {
       setLoading(true);
       try {
         const [polList, escList, monSummary] = await Promise.all([
-          slaService.getPolicies(),
-          slaService.getEscalations(),
+          slaService.getPolicies().catch(() => []),
+          slaService.getEscalations().catch(() => []),
           slaService.getMonitoringSummary().catch(() => null),
         ]);
         setPolicies(polList);

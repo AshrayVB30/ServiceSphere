@@ -87,6 +87,55 @@ class UserDetailSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class UserManagementSerializer(serializers.ModelSerializer):
+    """
+    Full CRUD serializer for administrative user directory management.
+    """
+    client_name = serializers.CharField(source="client.name", read_only=True)
+    role_display = serializers.CharField(source="get_role_display", read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "role",
+            "role_display",
+            "phone_number",
+            "client",
+            "client_name",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "date_joined",
+        ]
+        read_only_fields = ["id", "client_name", "role_display", "date_joined"]
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None) or "Password123!"
+        user = User(**validated_data)
+        user.set_password(password)
+        if user.role in (User.Role.ADMIN, User.Role.SUPPORT_AGENT):
+            user.is_staff = True
+        if user.role == User.Role.ADMIN:
+            user.is_superuser = True
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if instance.role in (User.Role.ADMIN, User.Role.SUPPORT_AGENT):
+            instance.is_staff = True
+        if instance.role == User.Role.ADMIN:
+            instance.is_superuser = True
+        instance.save()
+        return instance
+
+
 class PasswordChangeSerializer(serializers.Serializer):
     """
     Validates old password and enforces Django password complexity rules on new password.

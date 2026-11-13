@@ -57,6 +57,10 @@ export function TicketDetailPage() {
   const [submittingComment, setSubmittingComment] = useState(false);
 
   const fetchTicketDetails = useCallback(async () => {
+    if (!id || id === 'new') {
+      navigate('/tickets', { replace: true });
+      return;
+    }
     setLoading(true);
     setError(null);
     try {

@@ -12,7 +12,12 @@ When a user visits a URL, Django searches through these patterns in order:
 
 from django.contrib import admin
 from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+from accounts.views import UserViewSet
 from core.views import api_root
+
+users_router = DefaultRouter()
+users_router.register(r"users", UserViewSet, basename="user")
 
 urlpatterns = [
     # Root API Gateway Overview
@@ -20,6 +25,9 @@ urlpatterns = [
 
     # Built-in administrative dashboard (requires is_staff=True)
     path("admin/", admin.site.urls),
+
+    # User Directory REST APIs
+    path("api/", include(users_router.urls)),
 
     # Django REST Framework login and logout views for the browsable API.
     # Allows non-staff users (e.g. Clients, Approvers) to log in directly via the browser.

@@ -129,6 +129,7 @@ export function AppRoutes() {
 
           {/* Feature Modules */}
           <Route path="tickets" element={<TicketListPage />} />
+          <Route path="tickets/new" element={<Navigate to="/tickets" replace />} />
           <Route path="tickets/:id" element={<TicketDetailPage />} />
 
           <Route

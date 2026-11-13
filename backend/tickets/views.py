@@ -81,9 +81,10 @@ class TicketViewSet(viewsets.ModelViewSet):
         if is_system_admin(user):
             return queryset
 
-        # 2. Support agents see tickets assigned to them
+        # 2. Support agents see tickets assigned to them or created by them
         if user.role == User.Role.SUPPORT_AGENT:
-            return queryset.filter(assigned_to=user)
+            from django.db.models import Q
+            return queryset.filter(Q(assigned_to=user) | Q(created_by=user))
 
         # 3. Client employees and approvers see only their organization's tickets
         if user.role in (User.Role.CLIENT, User.Role.APPROVER):
@@ -97,24 +98,45 @@ class TicketViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """
         Creates a new support ticket and logs an initial CREATED audit history entry.
-        Only users with the CLIENT role can submit tickets.
+        Supports ticket creation by client users, support agents, and administrators.
         """
         user = self.request.user
+        client = None
 
-        if user.role != User.Role.CLIENT:
-            raise PermissionDenied("Only client users can create support tickets.")
+        if user.role == User.Role.CLIENT:
+            client = user.client
+            if not client:
+                from clients.models import Client
+                client = Client.objects.filter(is_active=True).first()
+            if not client or not client.is_active:
+                raise PermissionDenied("You must belong to an active client organization to submit a ticket.")
+        else:
+            # Admins, Agents, Approvers creating tickets
+            from clients.models import Client
+            client_id = self.request.data.get("client") or self.request.data.get("client_id")
+            if client_id:
+                try:
+                    if str(client_id).isdigit():
+                        client = Client.objects.filter(id=int(client_id), is_active=True).first()
+                    else:
+                        client = Client.objects.filter(code=client_id, is_active=True).first()
+                except Exception:
+                    pass
 
-        if not user.client:
-            raise PermissionDenied("You must belong to a client organization to submit a ticket.")
+            if not client and user.client and user.client.is_active:
+                client = user.client
 
-        if not user.client.is_active:
-            raise PermissionDenied("Your client organization account is currently inactive.")
+            if not client:
+                client = Client.objects.filter(is_active=True).first()
+
+            if not client:
+                raise ValidationError({"client": "No active client organization exists. Please onboard a client first."})
 
         # Save ticket and record initial audit history atomically
         with transaction.atomic():
             ticket = serializer.save(
                 created_by=user,
-                client=user.client,
+                client=client,
             )
             TicketHistory.objects.create(
                 ticket=ticket,
@@ -126,7 +148,8 @@ class TicketViewSet(viewsets.ModelViewSet):
             # tickets → sla → tickets would cause an ImportError if imported at the top.
 
             # Automatically assign active SLA policy and calculate initial deadlines
-            from sla.services import assign_sla_to_ticket  # noqa: PLC0415            assign_sla_to_ticket(ticket)
+            from sla.services import assign_sla_to_ticket  # noqa: PLC0415
+            assign_sla_to_ticket(ticket)
 
             # Dispatch ticket creation notifications
             from notifications.services import notify_ticket_created  # noqa: PLC0415
@@ -337,7 +360,7 @@ def can_access_ticket(user, ticket):
         return True
 
     if user.role == User.Role.SUPPORT_AGENT:
-        return ticket.assigned_to_id == user.id
+        return ticket.assigned_to_id == user.id or ticket.created_by_id == user.id
 
     if user.role in (User.Role.CLIENT, User.Role.APPROVER):
         return bool(

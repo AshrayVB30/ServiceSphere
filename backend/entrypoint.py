@@ -27,11 +27,18 @@ def main():
             print(f"==> [ERROR] Database migrations failed with exit code {e.returncode}")
             sys.exit(e.returncode)
 
-        print("==> [3/3] Seeding default Knowledge Base categories...")
+        print("==> [3/4] Seeding default Knowledge Base categories...")
         try:
             subprocess.run([sys.executable, "manage.py", "seed_kb_categories"], check=False)
         except Exception as e:
             print(f"==> [WARN] Could not seed KB categories: {e}")
+
+        print("==> [4/4] Seeding default Demo Users, Clients, SLA Policies, and Tickets...")
+        try:
+            subprocess.run([sys.executable, "manage.py", "seed_demo_users"], check=False)
+            subprocess.run([sys.executable, "manage.py", "publish_all_articles"], check=False)
+        except Exception as e:
+            print(f"==> [WARN] Could not seed demo data: {e}")
 
         print("==> Initialization complete. Launching application server...\n")
 

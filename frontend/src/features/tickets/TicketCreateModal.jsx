@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
@@ -8,6 +8,7 @@ import { Select } from '../../components/common/Select';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import ticketService from '../../services/ticketService';
+import clientService from '../../services/clientService';
 import { TICKET_PRIORITIES } from '../../constants';
 
 const CATEGORY_OPTIONS = [
@@ -30,6 +31,10 @@ export function TicketCreateModal({ isOpen, onClose, onCreated }) {
   const { user } = useAuth();
   const toast = useToast();
   const [submitting, setSubmitting] = useState(false);
+  const [clients, setClients] = useState([]);
+  const [selectedClient, setSelectedClient] = useState('');
+
+  const isStaff = user?.role === 'ADMIN' || user?.role === 'SUPPORT_AGENT' || user?.is_superuser;
 
   const {
     register,
@@ -45,6 +50,21 @@ export function TicketCreateModal({ isOpen, onClose, onCreated }) {
     },
   });
 
+  useEffect(() => {
+    if (isStaff && isOpen) {
+      clientService
+        .getClients()
+        .then((res) => {
+          const list = res || [];
+          setClients(list);
+          if (list.length > 0 && !selectedClient) {
+            setSelectedClient(String(list[0].id));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isStaff, isOpen, selectedClient]);
+
   const onSubmit = async (data) => {
     setSubmitting(true);
     try {
@@ -55,7 +75,9 @@ export function TicketCreateModal({ isOpen, onClose, onCreated }) {
         priority: data.priority,
       };
 
-      if (user?.client) {
+      if (selectedClient) {
+        payload.client = parseInt(selectedClient, 10);
+      } else if (user?.client) {
         payload.client = user.client.id || user.client;
       }
 
@@ -63,7 +85,7 @@ export function TicketCreateModal({ isOpen, onClose, onCreated }) {
 
       toast.success(
         'Ticket Created Successfully',
-        `Ticket ${created.ticket_number} is now assigned to the triage queue.`
+        `Ticket ${created.ticket_number || `#${created.id}`} is now assigned to the triage queue.`
       );
 
       reset();
@@ -100,6 +122,18 @@ export function TicketCreateModal({ isOpen, onClose, onCreated }) {
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {isStaff && clients.length > 0 && (
+          <Select
+            label="Client Organization"
+            options={clients.map((c) => ({
+              value: String(c.id),
+              label: `${c.name} (${c.code || c.tier || 'Client'})`,
+            }))}
+            value={selectedClient}
+            onChange={(e) => setSelectedClient(e.target.value)}
+          />
+        )}
+
         <Input
           label="Subject / Summary"
           placeholder="Brief summary of the issue..."

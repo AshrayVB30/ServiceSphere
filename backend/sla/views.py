@@ -38,8 +38,13 @@ class SLAPolicyViewSet(viewsets.ModelViewSet):
 
     queryset = SLAPolicy.objects.all()
     serializer_class = SLAPolicySerializer
-    permission_classes = [IsAuthenticated, IsSystemAdmin]
+    permission_classes = [IsAuthenticated]
     http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), IsSystemAdmin()]
 
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request, pk=None):
@@ -97,7 +102,7 @@ class TicketSLADetailView(APIView):
         is_admin = user.is_superuser or (user.is_staff and user.role == User.Role.ADMIN)
 
         if not is_admin:
-            if user.role == User.Role.SUPPORT_AGENT and ticket.assigned_to_id != user.id:
+            if user.role == User.Role.SUPPORT_AGENT and ticket.assigned_to_id != user.id and ticket.created_by_id != user.id:
                 raise PermissionDenied("You do not have permission to view SLA details for this ticket.")
 
             if user.role in (User.Role.CLIENT, User.Role.APPROVER):
@@ -118,12 +123,16 @@ class SLAMonitoringSummaryView(APIView):
     Endpoint providing aggregated SLA health metrics across all active tickets.
     GET /api/sla/monitoring/
 
-    Authorization: System administrators only.
+    Authorization: Administrators and Support Agents.
     """
 
-    permission_classes = [IsAuthenticated, IsSystemAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        user = request.user
+        if user.role == User.Role.CLIENT:
+            raise PermissionDenied("Clients cannot access global SLA monitoring reports.")
+
         active_tickets = Ticket.objects.exclude(
             status__in=[Ticket.Status.RESOLVED, Ticket.Status.CLOSED]
         )

@@ -37,6 +37,13 @@ export const ENDPOINTS = {
     DETAIL: (id) => `/clients/${id}/`,
   },
 
+  // User Directory (/api/users/)
+  USERS: {
+    LIST: '/users/',
+    DETAIL: (id) => `/users/${id}/`,
+    TOGGLE_ACTIVE: (id) => `/users/${id}/toggle-active/`,
+  },
+
   // Help Desk Tickets (/api/tickets/)
   TICKETS: {
     LIST: '/tickets/',

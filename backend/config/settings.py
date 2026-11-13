@@ -317,11 +317,15 @@ LOGOUT_REDIRECT_URL = "/api-auth/login/"
 # ==============================================================================
 # CELERY & REDIS CONFIGURATION (SLA Monitoring & Periodic Tasks)
 # ==============================================================================
+_redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
+_redis_port = os.getenv("REDIS_PORT", "6379")
+_default_redis_url = f"redis://{_redis_host}:{_redis_port}/0"
+
 # Redis message broker URL for Celery background tasks
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", _default_redis_url)
 
 # Redis database for storing Celery task results
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", _default_redis_url)
 
 # Supported data formats for task payloads and results
 CELERY_ACCEPT_CONTENT = ["json"]

@@ -21,7 +21,9 @@ from django.utils.decorators import method_decorator
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.views.decorators.csrf import ensure_csrf_cookie
-from rest_framework import permissions, status
+from django.db.models import Q
+from rest_framework import permissions, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -34,6 +36,7 @@ from .serializers import (
     PasswordResetRequestSerializer,
     RegisterSerializer,
     UserDetailSerializer,
+    UserManagementSerializer,
 )
 
 logger = logging.getLogger("django.security")
@@ -306,3 +309,51 @@ class PasswordResetConfirmAPIView(APIView):
             {"detail": "Your password has been successfully reset. You may now sign in with your new password."},
             status=status.HTTP_200_OK,
         )
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    Administrative API ViewSet for User Directory operations:
+    - GET   /api/users/                -> List users with search & role filters
+    - POST  /api/users/                -> Provision new user account
+    - GET   /api/users/{id}/           -> Retrieve user details
+    - PATCH /api/users/{id}/           -> Update user record
+    - POST  /api/users/{id}/toggle-active/ -> Suspend or activate user access
+    """
+    serializer_class = UserManagementSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = User.objects.select_related("client").order_by("-id")
+
+        # Staff and admins can inspect all users; clients only see staff or users in their client org
+        if not (user.is_superuser or (user.is_staff and user.role in (User.Role.ADMIN, User.Role.SUPPORT_AGENT))):
+            if user.client:
+                queryset = queryset.filter(Q(client=user.client) | Q(role__in=[User.Role.ADMIN, User.Role.SUPPORT_AGENT]))
+            else:
+                queryset = queryset.filter(id=user.id)
+
+        role = self.request.query_params.get("role")
+        if role and role.upper() != "ALL":
+            queryset = queryset.filter(role=role)
+
+        search = self.request.query_params.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(username__icontains=search)
+                | Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(email__icontains=search)
+            )
+
+        return queryset
+
+    @action(detail=True, methods=["post"], url_path="toggle-active")
+    def toggle_active(self, request, pk=None):
+        target_user = self.get_object()
+        target_user.is_active = not target_user.is_active
+        target_user.save(update_fields=["is_active"])
+        return Response(UserManagementSerializer(target_user).data, status=status.HTTP_200_OK)
+
