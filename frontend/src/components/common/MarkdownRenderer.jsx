@@ -1,18 +1,24 @@
+// Import React core library
 import React from 'react';
 
 /**
  * Parses inline markdown: bold, italic, code, links
+ * Tokenizes plain text string into structured React JSX nodes.
  */
 function renderInline(text) {
+  // Return null if input text is empty or undefined
   if (!text) return null;
 
-  // Tokenize inline elements: links, code, bold, italic
+  // Array to accumulate parsed React inline nodes
   const tokens = [];
+  // Mutable string holding unparsed text slice
   let remaining = text;
+  // Key counter for unique React key props
   let key = 0;
 
+  // Process string iteratively until all characters are consumed
   while (remaining.length > 0) {
-    // 1. Inline Code: `code`
+    // 1. Inline Code match pattern: `code`
     const codeMatch = remaining.match(/^`([^`]+)`/);
     if (codeMatch) {
       tokens.push(
@@ -27,7 +33,7 @@ function renderInline(text) {
       continue;
     }
 
-    // 2. Links: [label](url)
+    // 2. Links match pattern: [label](url)
     const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
     if (linkMatch) {
       tokens.push(
@@ -45,7 +51,7 @@ function renderInline(text) {
       continue;
     }
 
-    // 3. Bold: **text** or __text__
+    // 3. Bold text match pattern: **text** or __text__
     const boldMatch = remaining.match(/^(\*\*|__)(.*?)\1/);
     if (boldMatch) {
       tokens.push(
@@ -57,7 +63,7 @@ function renderInline(text) {
       continue;
     }
 
-    // 4. Italic: *text* or _text_
+    // 4. Italic text match pattern: *text* or _text_
     const italicMatch = remaining.match(/^(\*|_)(.*?)\1/);
     if (italicMatch && !italicMatch[2].startsWith(' ')) {
       tokens.push(
@@ -69,13 +75,13 @@ function renderInline(text) {
       continue;
     }
 
-    // 5. Plain text up to next special character
+    // 5. Plain text segment up to next special formatting character
     const nextSpecial = remaining.search(/[`*_[\]]/);
     if (nextSpecial === -1) {
       tokens.push(remaining);
       break;
     } else if (nextSpecial === 0) {
-      // Character didn't match formatting pattern, treat as literal
+      // Character didn't match formatting pattern, treat as literal text
       tokens.push(remaining[0]);
       remaining = remaining.slice(1);
     } else {
@@ -84,6 +90,7 @@ function renderInline(text) {
     }
   }
 
+  // Return generated tokens array
   return tokens;
 }
 
@@ -92,20 +99,26 @@ function renderInline(text) {
  * Zero-dependency, secure block-level parser for technical KB runbooks, code snippets, and tables.
  */
 export function MarkdownRenderer({ content, className = '' }) {
+  // If no markdown content is supplied, display muted placeholder
   if (!content) {
     return <p className="text-xs text-slate-400 italic">No content available.</p>;
   }
 
+  // Normalize Windows CRLF line endings to standard LF and split into line array
   const lines = content.replace(/\r\n/g, '\n').split('\n');
+  // Array to collect parsed block-level React elements
   const elements = [];
+  // Line iteration index
   let i = 0;
+  // Key counter for unique element keys
   let elemKey = 0;
 
+  // Process all lines sequentially
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
 
-    // Skip empty lines
+    // Skip empty blank lines
     if (!trimmed) {
       i++;
       continue;
@@ -116,11 +129,12 @@ export function MarkdownRenderer({ content, className = '' }) {
       const lang = trimmed.slice(3).trim();
       const codeLines = [];
       i++;
+      // Collect lines until closing code fence
       while (i < lines.length && !lines[i].trim().startsWith('```')) {
         codeLines.push(lines[i]);
         i++;
       }
-      i++; // Skip closing ```
+      i++; // Skip closing ``` fence
 
       elements.push(
         <div key={`code-block-${elemKey++}`} className="my-4 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-xs">
@@ -138,7 +152,7 @@ export function MarkdownRenderer({ content, className = '' }) {
       continue;
     }
 
-    // 2. Table: lines starting and ending with |
+    // 2. Table Block: lines starting and ending with pipe '|'
     if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
       const tableLines = [];
       while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
@@ -147,12 +161,13 @@ export function MarkdownRenderer({ content, className = '' }) {
       }
 
       if (tableLines.length >= 2) {
+        // Parse header row
         const headerRow = tableLines[0]
           .split('|')
           .slice(1, -1)
           .map((c) => c.trim());
 
-        // Skip separator row (e.g. |---|---|)
+        // Skip table separator row (e.g. |---|---|) and parse data rows
         const dataRows = tableLines.slice(2).map((r) =>
           r
             .split('|')
@@ -228,7 +243,7 @@ export function MarkdownRenderer({ content, className = '' }) {
       }
     }
 
-    // 4. Blockquote: > quote
+    // 4. Blockquote Block: > quote
     if (trimmed.startsWith('>')) {
       const quoteLines = [];
       while (i < lines.length && lines[i].trim().startsWith('>')) {
@@ -243,7 +258,7 @@ export function MarkdownRenderer({ content, className = '' }) {
       continue;
     }
 
-    // 5. Unordered List: - or *
+    // 5. Unordered List Block: - or *
     if (/^[-*]\s+/.test(trimmed)) {
       const items = [];
       while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
@@ -262,7 +277,7 @@ export function MarkdownRenderer({ content, className = '' }) {
       continue;
     }
 
-    // 6. Ordered List: 1. 2. 3.
+    // 6. Ordered List Block: 1. 2. 3.
     if (/^\d+\.\s+/.test(trimmed)) {
       const items = [];
       while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
@@ -281,7 +296,7 @@ export function MarkdownRenderer({ content, className = '' }) {
       continue;
     }
 
-    // 7. Regular Paragraph
+    // 7. Regular Text Paragraph
     const paragraphLines = [];
     while (
       i < lines.length &&
@@ -306,8 +321,9 @@ export function MarkdownRenderer({ content, className = '' }) {
     }
   }
 
+  // Render markdown body container with parsed elements
   return <div className={`markdown-body space-y-1 ${className}`}>{elements}</div>;
 }
 
+// Export MarkdownRenderer as default export
 export default MarkdownRenderer;
-

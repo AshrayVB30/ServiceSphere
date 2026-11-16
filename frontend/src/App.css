@@ -1,1 +1,5 @@
 /* App specific resets if needed - styles managed via Tailwind CSS and index.css */
+/* This file is intentionally minimal — component-level and global styles are handled by:
+   1. Tailwind CSS utility classes applied directly in JSX classNames
+   2. index.css for base resets, Tailwind directives (@tailwind base/components/utilities), and CSS variables
+   Any future App-level CSS overrides that cannot be expressed as Tailwind utilities should be placed here */

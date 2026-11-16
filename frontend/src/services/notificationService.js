@@ -1,4 +1,6 @@
+// Import central axios HTTP client configured with CSRF tokens and session credentials
 import apiClient from './api';
+// Import notification endpoint mapping definitions
 import { ENDPOINTS } from './endpoints';
 
 /**
@@ -13,7 +15,9 @@ export const notificationService = {
    * @returns {Promise<Array<object>>} Chronological notification feed.
    */
   async getNotifications() {
+    // Send GET request to notifications list endpoint
     const response = await apiClient.get(ENDPOINTS.NOTIFICATIONS.LIST);
+    // Return notifications results array
     return response.data?.results || response.data || [];
   },
 
@@ -24,7 +28,9 @@ export const notificationService = {
    * @returns {Promise<Array<object>>} Unread notifications.
    */
   async getUnreadNotifications() {
+    // Send GET request for unread notifications
     const response = await apiClient.get(ENDPOINTS.NOTIFICATIONS.UNREAD);
+    // Return unread notifications array
     return response.data?.results || response.data || [];
   },
 
@@ -35,7 +41,9 @@ export const notificationService = {
    * @returns {Promise<number>} Unread count.
    */
   async getUnreadCount() {
+    // Send GET request for unread notification count
     const response = await apiClient.get(ENDPOINTS.NOTIFICATIONS.UNREAD_COUNT);
+    // Return numerical unread count
     return response.data.unread_count ?? 0;
   },
 
@@ -47,7 +55,9 @@ export const notificationService = {
    * @returns {Promise<object>} Updated notification record.
    */
   async markAsRead(id) {
+    // Send PATCH request marking notification read
     const response = await apiClient.patch(ENDPOINTS.NOTIFICATIONS.MARK_READ(id));
+    // Return updated notification record
     return response.data;
   },
 
@@ -58,7 +68,9 @@ export const notificationService = {
    * @returns {Promise<object>} Count of updated notifications.
    */
   async markAllRead() {
+    // Send PATCH request marking all unread notifications as read
     const response = await apiClient.patch(ENDPOINTS.NOTIFICATIONS.MARK_ALL_READ);
+    // Return response confirmation
     return response.data;
   },
 
@@ -69,7 +81,9 @@ export const notificationService = {
    * @returns {Promise<object>} Notification preferences.
    */
   async getPreferences() {
+    // Send GET request for notification delivery preferences
     const response = await apiClient.get(ENDPOINTS.NOTIFICATIONS.PREFERENCES);
+    // Return preferences object
     return response.data;
   },
 
@@ -81,9 +95,12 @@ export const notificationService = {
    * @returns {Promise<object>} Updated preferences.
    */
   async updatePreferences(payload) {
+    // Send PATCH request updating preferences
     const response = await apiClient.patch(ENDPOINTS.NOTIFICATIONS.PREFERENCES, payload);
+    // Return updated preferences
     return response.data;
   },
 };
 
+// Export notificationService as default export
 export default notificationService;

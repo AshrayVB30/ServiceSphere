@@ -1,5 +1,8 @@
+// Import React and hooks for state, effect lifecycle, and memoized callbacks
 import React, { useState, useEffect, useCallback } from 'react';
+// Import routing hooks and components
 import { useParams, useNavigate, Link } from 'react-router-dom';
+// Import icons from Lucide for navigation, status, and communication controls
 import {
   ArrowLeft,
   Clock,
@@ -12,20 +15,34 @@ import {
   AlertCircle,
   RotateCw,
 } from 'lucide-react';
+// Import common Card surface component
 import { Card } from '../../components/common/Card';
+// Import common Button component
 import { Button } from '../../components/common/Button';
+// Import common Textarea component
 import { Textarea } from '../../components/common/Textarea';
+// Import common Select component
 import { Select } from '../../components/common/Select';
+// Import common Checkbox component
 import { Checkbox } from '../../components/common/Checkbox';
+// Import feedback StatusBadge component
 import { StatusBadge } from '../../components/feedback/StatusBadge';
+// Import feedback PriorityBadge component
 import { PriorityBadge } from '../../components/feedback/PriorityBadge';
+// Import Skeleton component for loading state placeholder
 import { Skeleton } from '../../components/common/Skeleton';
+// Import MarkdownRenderer to parse description content safely
 import { MarkdownRenderer } from '../../components/common/MarkdownRenderer';
+// Import useAuth hook to inspect current user role and identity
 import { useAuth } from '../../hooks/useAuth';
+// Import useToast hook to display notification popups
 import { useToast } from '../../hooks/useToast';
+// Import ticketService for API communication
 import { ticketService } from '../../services/ticketService';
+// Import ticket status and route constants
 import { TICKET_STATUSES, ROUTES } from '../../constants';
 
+// Status transition options available to staff members
 const STATUS_OPTIONS = [
   { value: TICKET_STATUSES.OPEN, label: 'Open' },
   { value: TICKET_STATUSES.IN_PROGRESS, label: 'In Progress' },
@@ -39,24 +56,38 @@ const STATUS_OPTIONS = [
  * Loads full incident details, conversation feed, internal notes, and SLA status from the backend.
  */
 export function TicketDetailPage() {
+  // Extract ticket primary key parameter from URL
   const { id } = useParams();
+  // Navigation hook
   const navigate = useNavigate();
+  // Extract user info and role flags from authentication context
   const { user, isAdmin, isAgent } = useAuth();
+  // Toast notifications dispatcher
   const toast = useToast();
 
+  // State storing ticket record details
   const [ticket, setTicket] = useState(null);
+  // State storing comments and conversation updates
   const [comments, setComments] = useState([]);
+  // State storing real-time SLA metrics and target deadlines
   const [slaData, setSlaData] = useState(null);
+  // Loading state flag
   const [loading, setLoading] = useState(true);
+  // Error state storing failure message
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('comments'); // 'comments' | 'history'
+  // Active tab selection in activity container ('comments' or 'history')
+  const [activeTab, setActiveTab] = useState('comments');
 
-  // New comment state
+  // New comment input message text state
   const [commentText, setCommentText] = useState('');
+  // Internal staff note toggle state
   const [isInternal, setIsInternal] = useState(false);
+  // Comment submission in-flight flag
   const [submittingComment, setSubmittingComment] = useState(false);
 
+  // Memoized fetch function retrieving ticket, conversation, and SLA data in parallel
   const fetchTicketDetails = useCallback(async () => {
+    // Guard against invalid or collision routes
     if (!id || id === 'new') {
       navigate('/tickets', { replace: true });
       return;
@@ -64,6 +95,7 @@ export function TicketDetailPage() {
     setLoading(true);
     setError(null);
     try {
+      // Execute all three API calls in parallel for optimal network performance
       const [ticketRes, commentsRes, slaRes] = await Promise.all([
         ticketService.getTicket(id),
         ticketService.getComments(id).catch(() => []),
@@ -77,16 +109,20 @@ export function TicketDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, navigate]);
 
+  // Fetch ticket details when component mounts or ID changes
   useEffect(() => {
     fetchTicketDetails();
   }, [fetchTicketDetails]);
 
+  // Status transition event handler
   const handleStatusChange = async (e) => {
     const newStatus = e.target.value;
     try {
+      // Submit status change to backend
       const updated = await ticketService.changeStatus(ticket.id, newStatus);
+      // Update local ticket record state
       setTicket(updated);
       toast.success('Status Updated', `Ticket marked as ${newStatus.replace('_', ' ')}.`);
     } catch (err) {
@@ -94,8 +130,10 @@ export function TicketDetailPage() {
     }
   };
 
+  // Self-assignment event handler for support engineers
   const handleAssignToMe = async () => {
     try {
+      // Assign ticket to current authenticated user
       const updated = await ticketService.assignTicket(ticket.id, user.id);
       setTicket(updated);
       toast.success('Ticket Assigned', 'Ticket assigned to you.');
@@ -104,20 +142,25 @@ export function TicketDetailPage() {
     }
   };
 
+  // New comment or internal note submission handler
   const handleAddComment = async (e) => {
     e.preventDefault();
     if (!commentText.trim()) return;
 
     setSubmittingComment(true);
     try {
+      // Post new comment to backend API
       const newComment = await ticketService.addComment(ticket.id, {
         message: commentText,
         is_internal: isInternal,
       });
 
+      // Append new comment to active list
       setComments((prev) => [...prev, newComment]);
+      // Reset input fields
       setCommentText('');
       setIsInternal(false);
+      // Display success notification
       toast.success(
         isInternal ? 'Internal Note Logged' : 'Reply Dispatched',
         isInternal
@@ -131,6 +174,7 @@ export function TicketDetailPage() {
     }
   };
 
+  // Loading skeleton placeholder state
   if (loading) {
     return (
       <div className="space-y-6">
@@ -147,6 +191,7 @@ export function TicketDetailPage() {
     );
   }
 
+  // Error boundary state
   if (error || !ticket) {
     return (
       <div className="p-6 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-3">
@@ -173,6 +218,7 @@ export function TicketDetailPage() {
     return isAdmin || isAgent;
   });
 
+  // Resolve creator, client organization, and assignee display strings
   const creatorName =
     ticket.created_by_username ||
     ticket.created_by?.first_name ||
@@ -185,9 +231,10 @@ export function TicketDetailPage() {
       ? `${ticket.assigned_to.first_name} ${ticket.assigned_to.last_name || ''}`
       : ticket.assigned_to?.username);
 
+  // Render ticket detail workspace layout
   return (
     <div className="space-y-6">
-      {/* Back button */}
+      {/* Back button navigation */}
       <div>
         <Link
           to={ROUTES.TICKETS}
@@ -486,4 +533,5 @@ export function TicketDetailPage() {
   );
 }
 
+// Export TicketDetailPage as default export
 export default TicketDetailPage;

@@ -1,11 +1,15 @@
+// Import React core library
 import React from 'react';
+// Import class name combination helper
 import { cn } from '../../utils/cn';
+// Import Skeleton component for loading rows placeholder
 import { Skeleton } from './Skeleton';
 
 /**
  * Enterprise Data Table Component (Stripe / Linear Precision Aesthetic)
  * Crisp hairline borders, optimal density, consistent tabular alignment.
  */
+// Reusable Table component supporting dynamic columns, loading skeletons, and row click handlers
 export function Table({
   columns = [],
   data = [],
@@ -14,11 +18,16 @@ export function Table({
   onRowClick,
   className = '',
 }) {
+  // Render table structure
   return (
+    // Outer scrollable card frame
     <div className={cn('w-full overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03)]', className)}>
+      {/* HTML table element */}
       <table className="w-full text-left border-collapse text-xs">
+        {/* Table header row */}
         <thead>
           <tr className="border-b border-slate-200/80 bg-slate-50/75">
+            {/* Map column definitions into header cells */}
             {columns.map((col, idx) => (
               <th
                 key={col.key || idx}
@@ -34,7 +43,9 @@ export function Table({
             ))}
           </tr>
         </thead>
+        {/* Table body content */}
         <tbody className="divide-y divide-slate-100 bg-white">
+          {/* 1. Loading state: render 5 skeleton placeholder rows */}
           {loading ? (
             Array.from({ length: 5 }).map((_, rIdx) => (
               <tr key={rIdx}>
@@ -45,6 +56,7 @@ export function Table({
                 ))}
               </tr>
             ))
+          // 2. Empty state: render full-width message cell when data array is empty
           ) : data.length === 0 ? (
             <tr>
               <td
@@ -57,6 +69,7 @@ export function Table({
                 </div>
               </td>
             </tr>
+          // 3. Data state: render active records
           ) : (
             data.map((row, rowIdx) => (
               <tr
@@ -76,6 +89,7 @@ export function Table({
                       col.cellClassName
                     )}
                   >
+                    {/* Execute custom render function if provided; otherwise render raw property value */}
                     {col.render ? col.render(row[col.key], row, rowIdx) : row[col.key]}
                   </td>
                 ))}
@@ -88,5 +102,5 @@ export function Table({
   );
 }
 
+// Export Table as default export
 export default Table;
-

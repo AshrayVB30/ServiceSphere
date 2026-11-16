@@ -1,12 +1,22 @@
+// Import React and useState hook for component state
 import React, { useState } from 'react';
+// Import routing hooks and components
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+// Import useForm hook from React Hook Form
 import { useForm } from 'react-hook-form';
+// Import ArrowRight icon from Lucide
 import { ArrowRight } from 'lucide-react';
+// Import custom useAuth hook to invoke login action
 import { useAuth } from '../../hooks/useAuth';
+// Import useToast hook to display notification popups
 import { useToast } from '../../hooks/useToast';
+// Import common Button component
 import { Button } from '../../components/common/Button';
+// Import common Input component
 import { Input } from '../../components/common/Input';
+// Import common Checkbox component
 import { Checkbox } from '../../components/common/Checkbox';
+// Import role and route constants
 import { USER_ROLES, ROUTES } from '../../constants';
 
 /**
@@ -14,14 +24,21 @@ import { USER_ROLES, ROUTES } from '../../constants';
  * Minimalist, high contrast, clean enterprise authentication.
  */
 export function LoginPage() {
+  // Extract login function from AuthContext
   const { login } = useAuth();
+  // Notification toast dispatcher
   const toast = useToast();
+  // Navigation hook
   const navigate = useNavigate();
+  // Location hook to read redirect state
   const location = useLocation();
 
+  // State storing error message from failed authentication attempt
   const [authError, setAuthError] = useState('');
+  // State indicating if login request is in flight
   const [submitting, setSubmitting] = useState(false);
 
+  // Form management using React Hook Form
   const {
     register,
     handleSubmit,
@@ -34,17 +51,22 @@ export function LoginPage() {
     },
   });
 
+  // Determine post-login redirect path (preserves location state or defaults to root dashboard)
   const from = location.state?.from?.pathname || ROUTES.DASHBOARD;
 
+  // Form submission handler
   const onSubmit = async (data) => {
+    // Clear previous errors
     setAuthError('');
     setSubmitting(true);
     try {
+      // Authenticate user with backend session endpoint
       const user = await login({
         email: data.email,
         password: data.password,
       });
 
+      // Display success toast notification
       toast.success(
         'Welcome back',
         `Signed in successfully as ${user.first_name || user.username}`
@@ -72,16 +94,20 @@ export function LoginPage() {
         }
       }
     } catch (err) {
+      // Display error banner on failure
       setAuthError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
+      // Reset loading state
       setSubmitting(false);
     }
   };
 
+  // Render sign-in page layout
   return (
+    // Fullscreen centered canvas
     <div className="min-h-screen flex flex-col justify-center bg-[#F5F6F8] p-6 sm:p-10">
       <div className="mx-auto w-full max-w-md">
-        {/* Brand identity */}
+        {/* Brand identity header */}
         <div className="text-center mb-8">
           <img
             src="/logo.png"
@@ -100,15 +126,18 @@ export function LoginPage() {
           </p>
         </div>
 
-        {/* Login form card */}
+        {/* Login form card surface */}
         <div className="rounded-xl border border-slate-200/90 bg-white p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          {/* Error banner alert */}
           {authError && (
             <div className="mb-5 rounded-lg bg-red-50 p-3.5 border border-red-200/80 text-xs font-medium text-red-700 leading-relaxed">
               {authError}
             </div>
           )}
 
+          {/* Login form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {/* Email or Username input */}
             <Input
               label="Email or Username"
               placeholder="name@company.com"
@@ -121,6 +150,7 @@ export function LoginPage() {
               })}
             />
 
+            {/* Password input and recovery link */}
             <div>
               <Input
                 label="Password"
@@ -147,6 +177,7 @@ export function LoginPage() {
               </div>
             </div>
 
+            {/* Submit button */}
             <div className="pt-2">
               <Button
                 type="submit"
@@ -160,6 +191,7 @@ export function LoginPage() {
               </Button>
             </div>
 
+            {/* Registration link */}
             <div className="text-center pt-2">
               <p className="text-xs text-slate-500">
                 Don't have an account?{' '}
@@ -174,7 +206,7 @@ export function LoginPage() {
           </form>
         </div>
 
-        {/* Footer info */}
+        {/* Security and isolation footer */}
         <p className="mt-6 text-center text-xs text-gray-500">
           Protected by Enterprise-grade Role-Based Access Control and Session Isolation.
         </p>
@@ -183,4 +215,5 @@ export function LoginPage() {
   );
 }
 
+// Export LoginPage as default export
 export default LoginPage;

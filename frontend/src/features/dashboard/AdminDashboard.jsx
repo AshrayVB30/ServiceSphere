@@ -1,5 +1,8 @@
+// Import React and hooks for state, effect lifecycle, and memoized callbacks
 import React, { useState, useEffect, useCallback } from 'react';
+// Import Link component for client-side routing
 import { Link } from 'react-router-dom';
+// Import operational metric and navigation icons from Lucide
 import {
   TrendingUp,
   Users,
@@ -9,6 +12,7 @@ import {
   RotateCw,
   AlertCircle,
 } from 'lucide-react';
+// Import chart primitives from Recharts for data visualizations
 import {
   AreaChart,
   Area,
@@ -21,18 +25,28 @@ import {
   Bar,
   Legend,
 } from 'recharts';
+// Import common Card surface component
 import { Card } from '../../components/common/Card';
+// Import common Table component
 import { Table } from '../../components/common/Table';
+// Import common Button component
 import { Button } from '../../components/common/Button';
+// Import common Skeleton loading component
 import { Skeleton } from '../../components/common/Skeleton';
+// Import common EmptyState graphic component
 import { EmptyState } from '../../components/common/EmptyState';
+// Import feedback StatusBadge component
 import { StatusBadge } from '../../components/feedback/StatusBadge';
+// Import feedback PriorityBadge component
 import { PriorityBadge } from '../../components/feedback/PriorityBadge';
+// Import analytics service for dashboard metrics and trends
 import { analyticsService } from '../../services/analyticsService';
+// Import ticket service for recent ticket records
 import { ticketService } from '../../services/ticketService';
+// Import route constants
 import { ROUTES } from '../../constants';
 
-// Priority bar colors
+// Priority bar chart color mapping palette
 const PRIORITY_COLORS = {
   LOW: '#64748B',
   MEDIUM: '#2563EB',
@@ -78,17 +92,25 @@ function formatTimeAgo(dateStr) {
  * priority distribution, and recent tickets stream from the Django backend.
  */
 export function AdminDashboard() {
+  // State storing operational summary metrics from analytics API
   const [summary, setSummary] = useState(null);
+  // State storing timeline trend points for AreaChart
   const [trends, setTrends] = useState([]);
+  // State storing priority distribution data for BarChart
   const [priorityData, setPriorityData] = useState([]);
+  // State storing recent ticket records for summary table
   const [recentTickets, setRecentTickets] = useState([]);
+  // Loading state flag
   const [loading, setLoading] = useState(true);
+  // Error state flag
   const [error, setError] = useState(null);
 
+  // Memoized data loader querying all four analytics and ticket endpoints in parallel
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      // Parallel fetch across analytics and ticket services
       const [summaryRes, trendsRes, priorityRes, ticketsRes] = await Promise.all([
         analyticsService.getDashboardSummary(),
         analyticsService.getTicketTrends(),
@@ -98,7 +120,7 @@ export function AdminDashboard() {
 
       setSummary(summaryRes);
 
-      // Format timeline data for AreaChart
+      // Format timeline data for AreaChart visualization
       const rawTimeline = trendsRes?.timeline || trendsRes || [];
       const formattedTimeline = rawTimeline.map((item) => ({
         day: formatTrendDate(item.date),
@@ -107,7 +129,7 @@ export function AdminDashboard() {
       }));
       setTrends(formattedTimeline);
 
-      // Format priority data for BarChart
+      // Format priority data for BarChart visualization
       const rawPriority = Array.isArray(priorityRes) ? priorityRes : priorityRes?.by_priority || [];
       const formattedPriority = rawPriority.map((p) => ({
         name: p.priority_display || p.priority,
@@ -116,7 +138,7 @@ export function AdminDashboard() {
       }));
       setPriorityData(formattedPriority);
 
-      // Slice recent tickets
+      // Extract top 5 recent tickets for table display
       const ticketList = Array.isArray(ticketsRes) ? ticketsRes : ticketsRes?.results || [];
       setRecentTickets(ticketList.slice(0, 5));
     } catch (err) {
@@ -126,10 +148,12 @@ export function AdminDashboard() {
     }
   }, []);
 
+  // Fetch dashboard data on initial mount
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
 
+  // Table columns definition for recent tickets stream
   const columns = [
     {
       key: 'ticket_number',
@@ -192,6 +216,7 @@ export function AdminDashboard() {
     },
   ];
 
+  // Loading skeleton placeholder layout
   if (loading) {
     return (
       <div className="space-y-6">
@@ -213,6 +238,7 @@ export function AdminDashboard() {
     );
   }
 
+  // Error boundary layout
   if (error) {
     return (
       <div className="p-6 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-3">
@@ -228,6 +254,7 @@ export function AdminDashboard() {
     );
   }
 
+  // Compute operational metric summary variables
   const activeTickets = summary?.tickets?.active_tickets ?? 0;
   const resolvedTickets = summary?.tickets?.completed_tickets ?? 0;
   const compliancePct = summary?.sla?.compliance_percentage ?? 100;
@@ -236,6 +263,7 @@ export function AdminDashboard() {
   const unassignedCount = summary?.tickets?.status_breakdown?.open ?? 0;
   const avgResolutionHours = summary?.sla?.avg_resolution_time_hours ?? 0;
 
+  // Render dashboard layout
   return (
     <div className="space-y-6">
       {/* Workspace Header & Action Hub */}
@@ -267,6 +295,7 @@ export function AdminDashboard() {
 
       {/* Integrated Operations Performance Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {/* Stat Card 1: Active Tickets */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-medium">Active Ticket Queue</span>
@@ -284,6 +313,7 @@ export function AdminDashboard() {
           </div>
         </div>
 
+        {/* Stat Card 2: Resolved Throughput */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-medium">Resolved Throughput</span>
@@ -301,6 +331,7 @@ export function AdminDashboard() {
           </div>
         </div>
 
+        {/* Stat Card 3: Global SLA Compliance */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-medium">Global SLA Compliance</span>
@@ -318,6 +349,7 @@ export function AdminDashboard() {
           </div>
         </div>
 
+        {/* Stat Card 4: Support Staff */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-medium">Active Support Staff</span>
@@ -336,7 +368,7 @@ export function AdminDashboard() {
 
       {/* Visualizations Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Ticket Volume Trends */}
+        {/* Ticket Volume Trends AreaChart */}
         <Card
           title="Ticket Intake vs. Resolution Velocity"
           subtitle="Operational throughput comparison from backend analytics"
@@ -410,7 +442,7 @@ export function AdminDashboard() {
           </div>
         </Card>
 
-        {/* Priority Breakdown */}
+        {/* Priority Breakdown BarChart */}
         <Card
           title="Active Backlog by Urgency"
           subtitle="Triage urgency distribution across queue"
@@ -460,4 +492,5 @@ export function AdminDashboard() {
   );
 }
 
+// Export AdminDashboard as default export
 export default AdminDashboard;

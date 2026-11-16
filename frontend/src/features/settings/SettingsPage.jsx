@@ -1,69 +1,117 @@
+/**
+ * @file SettingsPage.jsx
+ * @description System Administration and User Security Settings Page.
+ * Provides controls for general platform preferences (brand name, contact email, timezone, session timeouts),
+ * security governance policies (MFA, password rules, domain whitelisting), account password updates via Django auth,
+ * and ticket category taxonomy inspection.
+ */
+
+// Import React library and component state hook
 import React, { useState } from 'react';
+// Import Lucide icons for settings tabs, security badges, action triggers, and key indicators
 import { Settings, Shield, Save, Sliders, KeyRound } from 'lucide-react';
+// Import Card container component for structured settings panels
 import { Card } from '../../components/common/Card';
+// Import Button component for standard interactive triggers and submit actions
 import { Button } from '../../components/common/Button';
+// Import Input component for text, email, and password form fields
 import { Input } from '../../components/common/Input';
+// Import Select component for timezone and session timeout dropdowns
 import { Select } from '../../components/common/Select';
+// Import Checkbox component for toggling security governance policies
 import { Checkbox } from '../../components/common/Checkbox';
+// Import Badge component for rendering status indicator chips
 import { Badge } from '../../components/common/Badge';
+// Import custom useToast hook for interactive feedback alerts
 import { useToast } from '../../hooks/useToast';
+// Import authService API client for executing authenticated password changes
 import { authService } from '../../services/authService';
 
+/**
+ * SettingsPage Component
+ * Renders tabbed administrative preferences: General, Security & Access, and Taxonomy.
+ */
 export function SettingsPage() {
+  // Initialize toast dispatcher for user feedback notifications
   const toast = useToast();
+  // State tracking the currently active settings tab ('general' | 'security' | 'taxonomy')
   const [activeTab, setActiveTab] = useState('general');
 
-  // General Settings
+  // General Settings: Application brand name
   const [appName, setAppName] = useState('ServiceSphere Enterprise');
+  // General Settings: Global support contact email
   const [supportEmail, setSupportEmail] = useState('support@servicesphere.io');
+  // General Settings: Default platform timezone identifier
   const [timezone, setTimezone] = useState('UTC');
+  // General Settings: Session inactivity timeout in minutes
   const [sessionTimeout, setSessionTimeout] = useState('60');
 
-  // Security Settings
+  // Security Settings: Require multi-factor authentication for admins
   const [requireMfa, setRequireMfa] = useState(true);
+  // Security Settings: Enforce complex password rules
   const [enforcePasswordPolicy, setEnforcePasswordPolicy] = useState(true);
+  // Security Settings: Restrict self-registration to corporate domain whitelists
   const [restrictDomainSignups, setRestrictDomainSignups] = useState(true);
 
-  // Password Change
+  // Password Change Form State: Current user password
   const [oldPassword, setOldPassword] = useState('');
+  // Password Change Form State: New desired password
   const [newPassword, setNewPassword] = useState('');
+  // Password Change Form State: Password confirmation match
   const [confirmPassword, setConfirmPassword] = useState('');
+  // State tracking whether password change request is currently processing
   const [changingPassword, setChangingPassword] = useState(false);
 
+  // Handles simulated submission of general or security settings
   const handleSave = (e) => {
+    // Prevent default form submission reload
     e.preventDefault();
+    // Display confirmation toast
     toast.success('Configuration Saved', 'System settings updated successfully.');
   };
 
+  // Handles submitting the account password change form to the Django auth service
   const handleChangePassword = async (e) => {
+    // Prevent default browser form submission refresh
     e.preventDefault();
+    // Validate that new password matches confirmation
     if (newPassword !== confirmPassword) {
       toast.error('Validation Error', 'New passwords do not match.');
       return;
     }
+    // Set changing password loading flag
     setChangingPassword(true);
     try {
+      // Dispatch password update request to backend authentication service
       await authService.changePassword({
         old_password: oldPassword,
         new_password: newPassword,
       });
+      // Show success toast on confirmation
       toast.success('Password Updated', 'Your account credentials have been securely updated.');
+      // Clear password form fields
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err) {
+      // Display error notification on failure
       toast.error('Password Update Failed', err.message);
     } finally {
+      // Reset changing password loading flag
       setChangingPassword(false);
     }
   };
 
+  // Render settings page layout
   return (
+    // Outer vertical container with max-width restriction
     <div className="space-y-6 max-w-4xl">
       <div>
+        {/* Page title */}
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">
           System Administration Settings
         </h1>
+        {/* Subtitle describing administration scope */}
         <p className="text-xs text-gray-500 mt-1">
           Configure global platform parameters, taxonomy categories, and security governance rules.
         </p>
@@ -72,6 +120,7 @@ export function SettingsPage() {
       {/* Settings Navigation Toolbar */}
       <div className="flex items-center justify-between bg-white p-1.5 rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-x-auto scrollbar-none">
         <div className="flex items-center space-x-1">
+          {/* Map over available settings tabs to render tab buttons */}
           {[
             { label: 'General Configuration', value: 'general', icon: Settings },
             { label: 'Security & Access Policies', value: 'security', icon: Shield },
@@ -87,17 +136,21 @@ export function SettingsPage() {
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
+              {/* Tab icon */}
               <tab.icon className="h-3.5 w-3.5" />
+              {/* Tab label */}
               <span>{tab.label}</span>
             </button>
           ))}
         </div>
       </div>
 
+      {/* Tab 1: General Configuration Form */}
       {activeTab === 'general' && (
         <form onSubmit={handleSave} className="space-y-6">
           <Card title="Organization & Platform Identity">
             <div className="space-y-4">
+              {/* Brand name and support email row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="Application Brand Name"
@@ -112,6 +165,7 @@ export function SettingsPage() {
                 />
               </div>
 
+              {/* Timezone and session timeout row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Select
                   label="Default Platform Timezone"
@@ -140,6 +194,7 @@ export function SettingsPage() {
             </div>
           </Card>
 
+          {/* Form save button */}
           <div className="flex justify-end">
             <Button type="submit" variant="primary" size="md" leftIcon={Save}>
               Save General Preferences
@@ -148,11 +203,13 @@ export function SettingsPage() {
         </form>
       )}
 
+      {/* Tab 2: Security & Access Policies */}
       {activeTab === 'security' && (
         <div className="space-y-6">
           <form onSubmit={handleSave} className="space-y-6">
           <Card title="Session & Authentication Controls">
             <div className="space-y-4">
+              {/* Django Session Cookie status strip */}
               <div className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 bg-gray-50/70">
                 <div>
                   <p className="text-xs font-semibold text-gray-900">Django Session Cookie Security</p>
@@ -161,6 +218,7 @@ export function SettingsPage() {
                 <Badge variant="success">Enforced</Badge>
               </div>
 
+              {/* CSRF Protection status strip */}
               <div className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 bg-gray-50/70">
                 <div>
                   <p className="text-xs font-semibold text-gray-900">Cross-Site Request Forgery (CSRF)</p>
@@ -169,6 +227,7 @@ export function SettingsPage() {
                 <Badge variant="success">Protected</Badge>
               </div>
 
+              {/* Security policy checkbox toggles */}
               <div className="pt-2 space-y-3">
                 <Checkbox
                   label="Enforce Two-Factor Authentication (2FA) for Administrators"
@@ -194,6 +253,7 @@ export function SettingsPage() {
             </div>
           </Card>
 
+          {/* Save security rules button */}
           <div className="flex justify-end">
             <Button type="submit" variant="primary" size="md" leftIcon={Save}>
               Save Security Rules
@@ -201,13 +261,14 @@ export function SettingsPage() {
           </div>
         </form>
 
-        {/* Real Django Password Change Endpoint Integration */}
+        {/* Real Django Password Change Endpoint Integration Form */}
         <form onSubmit={handleChangePassword} className="space-y-4 pt-4 border-t border-slate-200">
           <Card
             title="Account Password Management"
             subtitle="Securely change your account password through the Django authentication service"
           >
             <div className="space-y-4 max-w-md">
+              {/* Current password input */}
               <Input
                 label="Current Password"
                 type="password"
@@ -216,6 +277,7 @@ export function SettingsPage() {
                 onChange={(e) => setOldPassword(e.target.value)}
                 required
               />
+              {/* New password input */}
               <Input
                 label="New Password"
                 type="password"
@@ -224,6 +286,7 @@ export function SettingsPage() {
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
               />
+              {/* Confirm password input */}
               <Input
                 label="Confirm New Password"
                 type="password"
@@ -233,6 +296,7 @@ export function SettingsPage() {
                 required
               />
 
+              {/* Submit password button */}
               <div className="pt-2">
                 <Button
                   type="submit"
@@ -250,9 +314,11 @@ export function SettingsPage() {
       </div>
       )}
 
+      {/* Tab 3: Taxonomy & Routing */}
       {activeTab === 'taxonomy' && (
         <Card title="Ticket Category Hierarchies & Auto-Assignment">
           <div className="space-y-3">
+            {/* Map over sample categories and assigned queue teams */}
             {[
               { name: 'Technical Support', count: 52, team: 'Tier 1 Engineering Queue' },
               { name: 'Billing & Invoicing', count: 26, team: 'Finance Operations Queue' },
@@ -265,9 +331,12 @@ export function SettingsPage() {
                 className="flex items-center justify-between p-3.5 rounded-xl border border-gray-200/80 bg-white"
               >
                 <div>
+                  {/* Category name */}
                   <p className="text-xs font-semibold text-gray-900">{cat.name}</p>
+                  {/* Assigned routing team queue */}
                   <p className="text-xs text-gray-500 mt-0.5">Routed to: {cat.team}</p>
                 </div>
+                {/* Tickets count badge */}
                 <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                   {cat.count} tickets
                 </span>
@@ -280,4 +349,5 @@ export function SettingsPage() {
   );
 }
 
+// Export SettingsPage as default export for lazy loading and routing
 export default SettingsPage;

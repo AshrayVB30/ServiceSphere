@@ -1,9 +1,13 @@
+// Import React core library
 import React from 'react';
+// Import class name combination helper
 import { cn } from '../../utils/cn';
 
 /**
  * Enterprise Textarea Component
+ * Multi-line form input with standardized styling, focus ring, and forwardRef support.
  */
+// Textarea component wrapped in React.forwardRef
 export const Textarea = React.forwardRef(function Textarea(
   {
     label,
@@ -18,20 +22,26 @@ export const Textarea = React.forwardRef(function Textarea(
   },
   ref
 ) {
+  // Generate consistent element ID from prop or sanitized label string
   const textareaId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
 
+  // Render textarea container
   return (
+    // Full-width form control wrapper
     <div className="w-full">
+      {/* Optional top label */}
       {label && (
         <label
           htmlFor={textareaId}
           className="block text-xs font-semibold tracking-wide text-gray-700 uppercase mb-1.5"
         >
           {label}
+          {/* Red asterisk indicator for required fields */}
           {required && <span className="text-red-500 ml-1 font-bold">*</span>}
         </label>
       )}
 
+      {/* Native HTML textarea element */}
       <textarea
         ref={ref}
         id={textareaId}
@@ -48,6 +58,7 @@ export const Textarea = React.forwardRef(function Textarea(
         {...props}
       />
 
+      {/* Error message or helper caption */}
       {error ? (
         <p className="mt-1.5 text-xs font-medium text-red-600">{error}</p>
       ) : helperText ? (
@@ -57,5 +68,5 @@ export const Textarea = React.forwardRef(function Textarea(
   );
 });
 
+// Export Textarea as default export
 export default Textarea;
-

@@ -1,15 +1,27 @@
+// Import React and hooks for state, effect, and memoized callbacks
 import React, { useState, useEffect, useCallback } from 'react';
+// Import useNavigate for programatic routing to ticket detail pages
 import { useNavigate } from 'react-router-dom';
+// Import Plus, Search, and RotateCw icons from Lucide
 import { Plus, Search, RotateCw } from 'lucide-react';
+// Import common Button component
 import { Button } from '../../components/common/Button';
+// Import common Table component
 import { Table } from '../../components/common/Table';
+// Import common Select component
 import { Select } from '../../components/common/Select';
+// Import feedback StatusBadge component
 import { StatusBadge } from '../../components/feedback/StatusBadge';
+// Import feedback PriorityBadge component
 import { PriorityBadge } from '../../components/feedback/PriorityBadge';
+// Import TicketCreateModal dialog component
 import { TicketCreateModal } from './TicketCreateModal';
+// Import ticketService to execute ticket querying
 import ticketService from '../../services/ticketService';
+// Import ticket status, priority, and route constants
 import { TICKET_STATUSES, TICKET_PRIORITIES, ROUTES } from '../../constants';
 
+// Lifecycle status tabs configuration array defined outside component to avoid re-creation
 const STATUS_TABS = [
   { label: 'All Tickets', value: 'ALL' },
   { label: 'Open', value: TICKET_STATUSES.OPEN },
@@ -19,6 +31,7 @@ const STATUS_TABS = [
   { label: 'Closed', value: TICKET_STATUSES.CLOSED },
 ];
 
+// Priority filter options array
 const PRIORITY_FILTER_OPTIONS = [
   { value: 'ALL', label: 'All Priorities' },
   { value: TICKET_PRIORITIES.LOW, label: 'Low Priority' },
@@ -27,34 +40,51 @@ const PRIORITY_FILTER_OPTIONS = [
   { value: TICKET_PRIORITIES.URGENT, label: 'Urgent Priority' },
 ];
 
+/**
+ * Enterprise Ticket Queue and Management View
+ * Allows browsing, searching, filtering, and assigning support tickets.
+ */
 export function TicketListPage() {
+  // Navigation hook
   const navigate = useNavigate();
 
+  // State storing fetched tickets array
   const [tickets, setTickets] = useState([]);
+  // Loading state flag during ticket fetch
   const [loading, setLoading] = useState(true);
+  // Active status tab filter ('ALL' or specific status)
   const [activeTab, setActiveTab] = useState('ALL');
+  // Free-text search query string
   const [searchQuery, setSearchQuery] = useState('');
+  // Selected priority filter ('ALL' or specific priority)
   const [priorityFilter, setPriorityFilter] = useState('ALL');
+  // Modal visibility flag for ticket creation
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // Memoized ticket fetch handler with query parameters
   const fetchTickets = useCallback(async () => {
     setLoading(true);
     try {
+      // Query ticket service with active filter criteria
       const data = await ticketService.getTickets({
         status: activeTab,
         priority: priorityFilter,
         search: searchQuery,
       });
+      // Store returned tickets array in state
       setTickets(data);
     } finally {
+      // Turn off loading indicator
       setLoading(false);
     }
   }, [activeTab, priorityFilter, searchQuery]);
 
+  // Refetch tickets whenever active filters change
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
 
+  // Data table column schema definitions
   const columns = [
     {
       key: 'ticket_number',
@@ -119,9 +149,10 @@ export function TicketListPage() {
     },
   ];
 
+  // Render ticket list workspace layout
   return (
     <div className="space-y-5">
-      {/* Header bar */}
+      {/* Top Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200/80">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
@@ -132,6 +163,7 @@ export function TicketListPage() {
           </p>
         </div>
 
+        {/* Action buttons */}
         <div className="flex items-center space-x-2.5">
           <Button
             variant="secondary"
@@ -195,7 +227,7 @@ export function TicketListPage() {
         </div>
       </div>
 
-      {/* Ticket Table */}
+      {/* Ticket Queue Data Table */}
       <Table
         columns={columns}
         data={tickets}
@@ -203,7 +235,7 @@ export function TicketListPage() {
         onRowClick={(row) => navigate(ROUTES.TICKET_DETAIL(row.id))}
       />
 
-      {/* Create Ticket Modal */}
+      {/* Create Ticket Modal Dialog */}
       <TicketCreateModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -215,4 +247,5 @@ export function TicketListPage() {
   );
 }
 
+// Export TicketListPage as default export
 export default TicketListPage;

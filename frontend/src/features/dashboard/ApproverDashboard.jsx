@@ -1,16 +1,30 @@
+// Import React and hooks for state, effect lifecycle, and memoized callbacks
 import React, { useState, useEffect, useCallback } from 'react';
+// Import icons from Lucide for decision actions, warnings, and refresh
 import { Check, X, HelpCircle, AlertCircle, RotateCw } from 'lucide-react';
+// Import common Card surface component
 import { Card } from '../../components/common/Card';
+// Import common Table component
 import { Table } from '../../components/common/Table';
+// Import common Button component
 import { Button } from '../../components/common/Button';
+// Import common Modal dialog component
 import { Modal } from '../../components/common/Modal';
+// Import common Textarea component
 import { Textarea } from '../../components/common/Textarea';
+// Import common Skeleton loading placeholder
 import { Skeleton } from '../../components/common/Skeleton';
+// Import common EmptyState graphic component
 import { EmptyState } from '../../components/common/EmptyState';
+// Import feedback StatusBadge component
 import { StatusBadge } from '../../components/feedback/StatusBadge';
+// Import useAuth hook
 import { useAuth } from '../../hooks/useAuth';
+// Import useToast hook
 import { useToast } from '../../hooks/useToast';
+// Import approvalService for API operations
 import { approvalService } from '../../services/approvalService';
+// Import approval status constants
 import { APPROVAL_STATUSES } from '../../constants';
 
 /**
@@ -19,10 +33,15 @@ import { APPROVAL_STATUSES } from '../../constants';
  * and contractual SLA credits retrieved from the Django Approvals REST API.
  */
 export function ApproverDashboard() {
+  // Extract user identity from authentication context
   const { user } = useAuth();
+  // Toast notifications dispatcher
   const toast = useToast();
+  // State storing approvals array
   const [approvals, setApprovals] = useState([]);
+  // Loading state flag
   const [loading, setLoading] = useState(true);
+  // Error state flag
   const [error, setError] = useState(null);
 
   // Decision Modal State
@@ -31,6 +50,7 @@ export function ApproverDashboard() {
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Memoized fetch function retrieving approval requests
   const fetchApprovals = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -45,6 +65,7 @@ export function ApproverDashboard() {
     }
   }, []);
 
+  // Fetch approvals on initial mount
   useEffect(() => {
     fetchApprovals();
   }, [fetchApprovals]);
@@ -61,12 +82,14 @@ export function ApproverDashboard() {
     (a) => a.status === APPROVAL_STATUSES.INFO_REQUESTED
   ).length;
 
+  // Decision modal opener handler
   const handleDecision = (req, action) => {
     setSelectedRequest(req);
     setActionType(action);
     setComment('');
   };
 
+  // Decision submission handler executing approve/reject/requestInfo
   const submitDecision = async () => {
     if (!selectedRequest) return;
     setSubmitting(true);
@@ -108,6 +131,7 @@ export function ApproverDashboard() {
     }
   };
 
+  // Loading skeleton placeholder layout
   if (loading) {
     return (
       <div className="space-y-6">
@@ -125,6 +149,7 @@ export function ApproverDashboard() {
     );
   }
 
+  // Error boundary layout
   if (error) {
     return (
       <div className="p-6 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-3">
@@ -140,8 +165,10 @@ export function ApproverDashboard() {
     );
   }
 
+  // Render approver dashboard layout
   return (
     <div className="space-y-6">
+      {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200/80">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
@@ -160,6 +187,7 @@ export function ApproverDashboard() {
 
       {/* Decision Summary Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        {/* Card 1: Awaiting decision */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <span className="text-xs font-medium text-slate-500">Awaiting Decision</span>
           <div className="mt-2 flex items-baseline space-x-2">
@@ -171,6 +199,7 @@ export function ApproverDashboard() {
           </p>
         </div>
 
+        {/* Card 2: Authorized records */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <span className="text-xs font-medium text-slate-500">Authorized Records</span>
           <div className="mt-2 flex items-baseline space-x-2">
@@ -182,6 +211,7 @@ export function ApproverDashboard() {
           </p>
         </div>
 
+        {/* Card 3: Clarification requested */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <span className="text-xs font-medium text-slate-500">Clarification Requested</span>
           <div className="mt-2 flex items-baseline space-x-2">
@@ -194,6 +224,7 @@ export function ApproverDashboard() {
         </div>
       </div>
 
+      {/* Pending authorization table */}
       <Card
         title="Pending Authorization Queue"
         subtitle="Policy exceptions and resource requests requiring executive sign-off"
@@ -274,7 +305,7 @@ export function ApproverDashboard() {
         )}
       </Card>
 
-      {/* Decision Comment Modal */}
+      {/* Decision Comment Modal Dialog */}
       <Modal
         isOpen={!!selectedRequest}
         onClose={() => setSelectedRequest(null)}
@@ -319,4 +350,5 @@ export function ApproverDashboard() {
   );
 }
 
+// Export ApproverDashboard as default export
 export default ApproverDashboard;

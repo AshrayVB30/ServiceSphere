@@ -1,5 +1,8 @@
+// Import React and hooks for state, effect lifecycle, and memoized callbacks
 import React, { useState, useEffect, useCallback } from 'react';
+// Import Link component for client-side routing
 import { Link } from 'react-router-dom';
+// Import icons from Lucide for clocks, action arrows, urgent fire badges, checkmarks, alerts, and refresh
 import {
   Clock,
   ArrowRight,
@@ -8,19 +11,29 @@ import {
   AlertCircle,
   RotateCw,
 } from 'lucide-react';
+// Import common Card surface component
 import { Card } from '../../components/common/Card';
+// Import common Table component
 import { Table } from '../../components/common/Table';
+// Import common Button component
 import { Button } from '../../components/common/Button';
+// Import common Skeleton loading placeholder
 import { Skeleton } from '../../components/common/Skeleton';
+// Import common EmptyState graphic component
 import { EmptyState } from '../../components/common/EmptyState';
+// Import feedback StatusBadge component
 import { StatusBadge } from '../../components/feedback/StatusBadge';
+// Import feedback PriorityBadge component
 import { PriorityBadge } from '../../components/feedback/PriorityBadge';
+// Import ticketService for ticket operations
 import { ticketService } from '../../services/ticketService';
+// Import ticket status, priority, and route constants
 import { TICKET_STATUSES, TICKET_PRIORITIES, ROUTES } from '../../constants';
 
 /**
  * Format timestamp into human readable relative duration or formatted date.
  * @param {string} dateStr - ISO date string.
+ * @param {string} priority - Ticket priority level.
  * @returns {string} Human formatted string.
  */
 function formatTimeRemaining(dateStr, priority) {
@@ -49,10 +62,14 @@ function formatTimeRemaining(dateStr, priority) {
  * and active triage capacity metrics retrieved from the Django REST API.
  */
 export function AgentDashboard() {
+  // State storing assigned tickets array
   const [tickets, setTickets] = useState([]);
+  // Loading state flag
   const [loading, setLoading] = useState(true);
+  // Error state flag
   const [error, setError] = useState(null);
 
+  // Memoized fetch function retrieving assigned tickets
   const fetchAgentWorkload = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -68,6 +85,7 @@ export function AgentDashboard() {
     }
   }, []);
 
+  // Fetch tickets on initial mount
   useEffect(() => {
     fetchAgentWorkload();
   }, [fetchAgentWorkload]);
@@ -101,6 +119,7 @@ export function AgentDashboard() {
       t.status !== TICKET_STATUSES.CLOSED
   );
 
+  // Table column schema definitions
   const columns = [
     {
       key: 'ticket_number',
@@ -191,6 +210,7 @@ export function AgentDashboard() {
     },
   ];
 
+  // Loading skeleton placeholder layout
   if (loading) {
     return (
       <div className="space-y-6">
@@ -209,6 +229,7 @@ export function AgentDashboard() {
     );
   }
 
+  // Error boundary layout
   if (error) {
     return (
       <div className="p-6 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-3">
@@ -224,9 +245,10 @@ export function AgentDashboard() {
     );
   }
 
+  // Render agent workbench dashboard layout
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200/80">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
@@ -251,7 +273,7 @@ export function AgentDashboard() {
         </div>
       </div>
 
-      {/* SLA Breach Warning Callout or All Clear */}
+      {/* SLA Breach Warning Callout or All Clear Banner */}
       {topCriticalTicket ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <div className="flex items-start space-x-3">
@@ -291,6 +313,7 @@ export function AgentDashboard() {
 
       {/* Specialist Capacity & Pipeline Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {/* Card 1: Assigned tickets */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <span className="text-xs font-medium text-slate-500">My Assigned Tickets</span>
           <div className="mt-2 flex items-baseline justify-between">
@@ -305,6 +328,7 @@ export function AgentDashboard() {
           </div>
         </div>
 
+        {/* Card 2: Urgent attention */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <span className="text-xs font-medium text-slate-500">Urgent SLA Attention</span>
           <div className="mt-2 flex items-baseline justify-between">
@@ -319,6 +343,7 @@ export function AgentDashboard() {
           </div>
         </div>
 
+        {/* Card 3: Awaiting Customer */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <span className="text-xs font-medium text-slate-500">Awaiting Customer</span>
           <div className="mt-2 flex items-baseline justify-between">
@@ -333,6 +358,7 @@ export function AgentDashboard() {
           </div>
         </div>
 
+        {/* Card 4: Resolved cases */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <span className="text-xs font-medium text-slate-500">Resolved Cases</span>
           <div className="mt-2 flex items-baseline justify-between">
@@ -367,4 +393,5 @@ export function AgentDashboard() {
   );
 }
 
+// Export AgentDashboard as default export
 export default AgentDashboard;

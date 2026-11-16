@@ -1,15 +1,28 @@
+// Import React and hooks for state, effect lifecycle, and memoized callbacks
 import React, { useState, useEffect, useCallback } from 'react';
+// Import routing hooks and components
 import { Link, useNavigate } from 'react-router-dom';
+// Import icons from Lucide for action buttons and metric indicators
 import { Plus, BookOpen, Clock, CheckCircle2, Ticket, ArrowRight, ShieldCheck, AlertCircle, RotateCw } from 'lucide-react';
+// Import common Card surface component
 import { Card } from '../../components/common/Card';
+// Import common Button component
 import { Button } from '../../components/common/Button';
+// Import common Table component
 import { Table } from '../../components/common/Table';
+// Import common Skeleton loading placeholder
 import { Skeleton } from '../../components/common/Skeleton';
+// Import common EmptyState graphic component
 import { EmptyState } from '../../components/common/EmptyState';
+// Import feedback StatusBadge component
 import { StatusBadge } from '../../components/feedback/StatusBadge';
+// Import feedback PriorityBadge component
 import { PriorityBadge } from '../../components/feedback/PriorityBadge';
+// Import ticket status and route constants
 import { TICKET_STATUSES, ROUTES } from '../../constants';
+// Import custom useAuth hook to inspect tenant account
 import { useAuth } from '../../hooks/useAuth';
+// Import ticketService for API operations
 import { ticketService } from '../../services/ticketService';
 
 /**
@@ -18,12 +31,18 @@ import { ticketService } from '../../services/ticketService';
  * clarification alerts, and resolution metrics retrieved from the Django API.
  */
 export function ClientDashboard() {
+  // Navigation hook
   const navigate = useNavigate();
+  // Extract user info from authentication context
   const { user } = useAuth();
+  // State storing tickets array
   const [tickets, setTickets] = useState([]);
+  // Loading state flag
   const [loading, setLoading] = useState(true);
+  // Error state flag
   const [error, setError] = useState(null);
 
+  // Memoized ticket fetcher retrieving client tickets
   const fetchClientTickets = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -39,6 +58,7 @@ export function ClientDashboard() {
     }
   }, []);
 
+  // Fetch tickets on initial mount
   useEffect(() => {
     fetchClientTickets();
   }, [fetchClientTickets]);
@@ -58,6 +78,7 @@ export function ClientDashboard() {
 
   const organizationName = user?.client?.name || user?.client_name || 'Organization Portal';
 
+  // Table columns definition
   const columns = [
     {
       key: 'ticket_number',
@@ -105,6 +126,7 @@ export function ClientDashboard() {
     },
   ];
 
+  // Loading skeleton layout
   if (loading) {
     return (
       <div className="space-y-6">
@@ -119,6 +141,7 @@ export function ClientDashboard() {
     );
   }
 
+  // Error boundary layout
   if (error) {
     return (
       <div className="p-6 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-3">
@@ -134,6 +157,7 @@ export function ClientDashboard() {
     );
   }
 
+  // Render client portal layout
   return (
     <div className="space-y-6">
       {/* Enterprise Service Desk Command Header */}
@@ -177,6 +201,7 @@ export function ClientDashboard() {
 
       {/* Account Request Status Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        {/* Card 1: Active requests */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-medium">Active Support Requests</span>
@@ -191,6 +216,7 @@ export function ClientDashboard() {
           </p>
         </div>
 
+        {/* Card 2: Awaiting clarification */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-medium">Awaiting Client Clarification</span>
@@ -207,6 +233,7 @@ export function ClientDashboard() {
           </p>
         </div>
 
+        {/* Card 3: Resolved inquiries */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-medium">Resolved Inquiries</span>
@@ -249,4 +276,5 @@ export function ClientDashboard() {
   );
 }
 
+// Export ClientDashboard as default export
 export default ClientDashboard;

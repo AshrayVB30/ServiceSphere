@@ -1,12 +1,22 @@
+// Import React and useState hook for component state
 import React, { useState } from 'react';
+// Import navigation and link routing components
 import { useNavigate, Link } from 'react-router-dom';
+// Import useForm hook from React Hook Form
 import { useForm } from 'react-hook-form';
+// Import ArrowRight, ShieldCheck, and User icons from Lucide
 import { ArrowRight, ShieldCheck, User } from 'lucide-react';
+// Import custom useAuth hook to execute registration action
 import { useAuth } from '../../hooks/useAuth';
+// Import useToast hook to display notification popups
 import { useToast } from '../../hooks/useToast';
+// Import common Button component
 import { Button } from '../../components/common/Button';
+// Import common Input component
 import { Input } from '../../components/common/Input';
+// Import common Checkbox component
 import { Checkbox } from '../../components/common/Checkbox';
+// Import role and route constants
 import { USER_ROLES, ROUTES } from '../../constants';
 
 /**
@@ -15,14 +25,21 @@ import { USER_ROLES, ROUTES } from '../../constants';
  * link or onboard their company workspace, and establish their session directly.
  */
 export function RegisterPage() {
+  // Extract registerUser action handler from AuthContext
   const { register: registerUser } = useAuth();
+  // Notification toast dispatcher
   const toast = useToast();
+  // Navigation hook
   const navigate = useNavigate();
 
+  // State storing error message from validation or API error response
   const [authError, setAuthError] = useState('');
+  // State indicating if registration request is in flight
   const [submitting, setSubmitting] = useState(false);
+  // State tracking selected role tier (CLIENT or APPROVER)
   const [selectedRole, setSelectedRole] = useState(USER_ROLES.CLIENT);
 
+  // Form management using React Hook Form
   const {
     register,
     handleSubmit,
@@ -44,14 +61,18 @@ export function RegisterPage() {
     },
   });
 
+  // Form submission handler
   const onSubmit = async (data) => {
+    // Clear previous error message
     setAuthError('');
 
+    // Client-side confirmation password matching check
     if (data.password !== data.password_confirm) {
       setAuthError('Passwords do not match. Please verify your entries.');
       return;
     }
 
+    // Terms agreement validation check
     if (!data.agreeTerms) {
       setAuthError('You must agree to the Terms of Service to create an account.');
       return;
@@ -59,6 +80,7 @@ export function RegisterPage() {
 
     setSubmitting(true);
     try {
+      // Build sanitized registration payload
       const payload = {
         username: data.username.trim(),
         email: data.email.trim().toLowerCase(),
@@ -71,8 +93,10 @@ export function RegisterPage() {
         password_confirm: data.password_confirm,
       };
 
+      // Dispatch registration request to backend auth service
       const newUser = await registerUser(payload);
 
+      // Display success notification
       toast.success(
         'Account Registered Successfully',
         `Welcome to ServiceSphere, ${newUser.first_name || newUser.username}!`
@@ -85,12 +109,15 @@ export function RegisterPage() {
         navigate(ROUTES.CLIENT_DASHBOARD, { replace: true });
       }
     } catch (err) {
+      // Display error banner on failure
       setAuthError(err.message || 'Registration failed. Please check your submission.');
     } finally {
+      // Reset loading flag
       setSubmitting(false);
     }
   };
 
+  // Form validation error handler
   const onValidationError = (formErrors) => {
     const firstKey = Object.keys(formErrors)[0];
     if (firstKey) {
@@ -98,7 +125,9 @@ export function RegisterPage() {
     }
   };
 
+  // Render registration page layout
   return (
+    // Fullscreen centered canvas
     <div className="min-h-screen flex flex-col justify-center bg-[#F5F6F8] p-6 sm:p-10">
       <div className="mx-auto w-full max-w-lg">
         {/* Brand identity header */}
@@ -345,4 +374,5 @@ export function RegisterPage() {
   );
 }
 
+// Export RegisterPage as default export
 export default RegisterPage;

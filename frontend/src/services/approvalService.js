@@ -1,4 +1,6 @@
+// Import central axios HTTP client configured with CSRF tokens and session credentials
 import apiClient from './api';
+// Import approval endpoint mapping definitions
 import { ENDPOINTS } from './endpoints';
 
 /**
@@ -14,11 +16,15 @@ export const approvalService = {
    * @returns {Promise<Array<object>>} List of approval requests.
    */
   async getApprovals(params = {}) {
+    // Clone query parameters
     const query = { ...params };
+    // Remove status parameter if 'ALL' to retrieve all statuses
     if (query.status === 'ALL') {
       delete query.status;
     }
+    // Send GET request to approvals list endpoint with filters
     const response = await apiClient.get(ENDPOINTS.APPROVALS.LIST, { params: query });
+    // Return approval records array from results or raw response
     return response.data?.results || response.data || [];
   },
 
@@ -29,7 +35,9 @@ export const approvalService = {
    * @returns {Promise<object>} Approval request detail with records.
    */
   async getApproval(id) {
+    // Send GET request to approval detail endpoint
     const response = await apiClient.get(ENDPOINTS.APPROVALS.DETAIL(id));
+    // Return approval request detail object
     return response.data;
   },
 
@@ -44,11 +52,16 @@ export const approvalService = {
    * @returns {Promise<object>} Created approval request.
    */
   async createApproval(payload) {
+    // Send POST request to create new approval workflow
     const response = await apiClient.post(ENDPOINTS.APPROVALS.LIST, {
+      // Linked ticket identifier
       ticket: payload.ticket,
+      // Target approver user ID
       approver: payload.approver,
+      // Justification text
       reason: payload.reason,
     });
+    // Return created approval record
     return response.data;
   },
 
@@ -61,9 +74,12 @@ export const approvalService = {
    * @returns {Promise<object>} Updated approval request.
    */
   async approve(id, comment = '') {
+    // Send POST request approving request
     const response = await apiClient.post(ENDPOINTS.APPROVALS.APPROVE(id), {
+      // Optional decision rationale note
       comment,
     });
+    // Return updated approval record
     return response.data;
   },
 
@@ -76,9 +92,12 @@ export const approvalService = {
    * @returns {Promise<object>} Updated approval request.
    */
   async reject(id, comment = '') {
+    // Send POST request rejecting request
     const response = await apiClient.post(ENDPOINTS.APPROVALS.REJECT(id), {
+      // Rejection explanation
       comment,
     });
+    // Return updated approval record
     return response.data;
   },
 
@@ -91,9 +110,12 @@ export const approvalService = {
    * @returns {Promise<object>} Updated approval request.
    */
   async requestInfo(id, comment) {
+    // Send POST request requesting more information
     const response = await apiClient.post(ENDPOINTS.APPROVALS.REQUEST_INFO(id), {
+      // Explanation of required information
       comment,
     });
+    // Return updated approval record
     return response.data;
   },
 
@@ -107,11 +129,15 @@ export const approvalService = {
    * @returns {Promise<object>} Updated approval request.
    */
   async resubmit(id, payload = {}) {
+    // Send POST request resubmitting approval request
     const response = await apiClient.post(ENDPOINTS.APPROVALS.RESUBMIT(id), {
+      // Resubmission clarification comment
       comment: payload.comment || '',
     });
+    // Return updated approval record
     return response.data;
   },
 };
 
+// Export approvalService as default export
 export default approvalService;

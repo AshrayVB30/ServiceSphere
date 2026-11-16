@@ -1,4 +1,6 @@
+// Import central axios HTTP client configured with CSRF interceptors and credentials
 import apiClient from './api';
+// Import centralized endpoint dictionary for authentication routes
 import { ENDPOINTS } from './endpoints';
 
 /**
@@ -13,7 +15,9 @@ export const authService = {
    * @returns {Promise<string>} CSRF token string.
    */
   async getCsrfToken() {
+    // Send GET request to Django CSRF endpoint to seed the 'csrftoken' cookie
     const response = await apiClient.get(ENDPOINTS.AUTH.CSRF);
+    // Return extracted CSRF token string from response payload
     return response.data.csrfToken;
   },
 
@@ -25,13 +29,16 @@ export const authService = {
    * @returns {Promise<object>} User profile object.
    */
   async register(userData) {
-    // Ensure CSRF cookie is initialized before submitting POST
+    // Ensure CSRF cookie is initialized before submitting POST request
     await this.getCsrfToken().catch(() => {});
 
     try {
+      // Send POST request with user registration fields
       const response = await apiClient.post(ENDPOINTS.AUTH.REGISTER, userData);
+      // Return user profile object from response
       return response.data.user || response.data;
     } catch (error) {
+      // Throw descriptive error with formatted backend validation message
       throw new Error(error.formattedMessage || 'Registration failed. Please check form details.', {
         cause: error,
       });
@@ -49,18 +56,22 @@ export const authService = {
    * @returns {Promise<object>} User profile object.
    */
   async login({ email, username, password }) {
+    // Accept either username or email as the login identifier
     const identifier = username || email;
 
     // Ensure CSRF cookie is initialized before submitting POST
     await this.getCsrfToken().catch(() => {});
 
     try {
+      // Dispatch login request to Django backend authentication endpoint
       const response = await apiClient.post(ENDPOINTS.AUTH.LOGIN, {
         username: identifier,
         password,
       });
+      // Return authenticated user profile data
       return response.data.user || response.data;
     } catch (error) {
+      // Throw descriptive error with formatted message
       throw new Error(error.formattedMessage || 'Authentication failed. Please verify credentials.', {
         cause: error,
       });
@@ -75,9 +86,12 @@ export const authService = {
    */
   async getMe() {
     try {
+      // Fetch authenticated user profile using active session cookie
       const response = await apiClient.get(ENDPOINTS.AUTH.ME);
+      // Return user data object
       return response.data;
     } catch (error) {
+      // Throw error if session is invalid or expired
       throw new Error(error.formattedMessage || 'Session expired or unauthenticated.', {
         cause: error,
       });
@@ -92,6 +106,7 @@ export const authService = {
    */
   async logout() {
     try {
+      // Send logout request to backend to delete session on server
       await apiClient.post(ENDPOINTS.AUTH.LOGOUT);
     } catch {
       // Invalidate frontend state regardless of network response
@@ -110,12 +125,15 @@ export const authService = {
    */
   async changePassword({ old_password, new_password }) {
     try {
+      // Send password update request with current and new passwords
       const response = await apiClient.post(ENDPOINTS.AUTH.CHANGE_PASSWORD, {
         old_password,
         new_password,
       });
+      // Return success response data
       return response.data;
     } catch (error) {
+      // Throw formatted error message
       throw new Error(error.formattedMessage || 'Failed to update password.', {
         cause: error,
       });
@@ -127,11 +145,15 @@ export const authService = {
    * Endpoint: POST /api/auth/password-reset/
    */
   async requestPasswordReset(email) {
+    // Ensure CSRF token is available
     await this.getCsrfToken().catch(() => {});
     try {
+      // Submit password reset request with user email
       const response = await apiClient.post(ENDPOINTS.AUTH.PASSWORD_RESET, { email });
+      // Return response payload
       return response.data;
     } catch (error) {
+      // Throw formatted error
       throw new Error(error.formattedMessage || 'Failed to submit password reset request.', {
         cause: error,
       });
@@ -143,16 +165,20 @@ export const authService = {
    * Endpoint: POST /api/auth/password-reset-confirm/
    */
   async confirmPasswordReset({ uid, token, new_password, new_password_confirm }) {
+    // Ensure CSRF token is available
     await this.getCsrfToken().catch(() => {});
     try {
+      // Submit new password along with uid and token parameters
       const response = await apiClient.post(ENDPOINTS.AUTH.PASSWORD_RESET_CONFIRM, {
         uid,
         token,
         new_password,
         new_password_confirm,
       });
+      // Return confirmation response data
       return response.data;
     } catch (error) {
+      // Throw formatted error
       throw new Error(error.formattedMessage || 'Password reset confirmation failed.', {
         cause: error,
       });
@@ -160,4 +186,5 @@ export const authService = {
   },
 };
 
+// Export authService as default export
 export default authService;
